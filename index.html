@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YouTube Transcript Player</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; }
+      .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+      input[type="text"] { flex: 1; padding: 8px 10px; font-size: 14px; }
+      button { padding: 6px 10px; font-size: 14px; cursor: pointer; }
+      #player { width: 100%; max-width: 800px; aspect-ratio: 16 / 9; background: #000; margin-bottom: 16px; }
+      #transcript { max-width: 800px; }
+      .line { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eee; }
+      .ts { min-width: 64px; }
+      .ts.looping { background: #ffd54f; }
+      .muted { color: #666; font-size: 13px; }
+      .error { color: #b00020; }
+    </style>
+  </head>
+  <body>
+    <div class="row">
+      <input id="videoInput" type="text" placeholder="Paste YouTube URL or ID (11 chars)" />
+      <button id="loadBtn">Load</button>
+    </div>
+    <div id="player"></div>
+    <div id="meta" class="muted"></div>
+    <div id="transcript"></div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+      let player = null;
+      let playerReady = false;
+      let currentVideoId = null;
+      let loopIntervalId = null;
+      let loopActive = false;
+      let loopStart = 0;
+      let loopEnd = 0;
+      let activeLoopButton = null;
+
+      function pad2(n) { return String(n).padStart(2, '0'); }
+      function formatTime(totalSeconds) {
+        const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return m + ':' + pad2(r);
+      }
+
+      function extractVideoId(input) {
+        if (!input) return null;
+        input = input.trim();
+        const idLike = /^[a-zA-Z0-9_-]{11}$/;
+        if (idLike.test(input)) return input;
+        try {
+          const u = new URL(input);
+          if (u.hostname.endsWith('youtu.be')) {
+            const id = u.pathname.split('/').filter(Boolean)[0];
+            return idLike.test(id) ? id : null;
+          }
+          if (u.searchParams.has('v')) {
+            const id = u.searchParams.get('v');
+            return idLike.test(id) ? id : null;
+          }
+          const path = u.pathname.split('/').filter(Boolean);
+          if (path[0] === 'embed' && idLike.test(path[1])) return path[1];
+          if (path[0] === 'shorts' && idLike.test(path[1])) return path[1];
+          return null;
+        } catch {
+          return null;
+        }
+      }
+
+      function stopLoop() {
+        loopActive = false;
+        loopStart = 0; loopEnd = 0;
+        if (loopIntervalId) { clearInterval(loopIntervalId); loopIntervalId = null; }
+        if (activeLoopButton) { activeLoopButton.classList.remove('looping'); activeLoopButton = null; }
+      }
+
+      function startLoop(start, end, buttonEl) {
+        stopLoop();
+        loopActive = true;
+        loopStart = start;
+        loopEnd = end;
+        activeLoopButton = buttonEl;
+        if (activeLoopButton) activeLoopButton.classList.add('looping');
+        loopIntervalId = setInterval(() => {
+          if (!player || !playerReady) return;
+          const t = player.getCurrentTime();
+          if (t >= loopEnd - 0.05) {
+            player.seekTo(loopStart, true);
+            player.playVideo();
+          }
+        }, 150);
+      }
+
+      function onClickTimestamp(ev) {
+        const btn = ev.currentTarget;
+        const start = parseFloat(btn.dataset.start);
+        if (!playerReady) return;
+        player.seekTo(start, true);
+        player.playVideo();
+      }
+
+      function onDoubleClickTimestamp(ev) {
+        const btn = ev.currentTarget;
+        const start = parseFloat(btn.dataset.start);
+        const dur = parseFloat(btn.dataset.dur);
+        const end = start + dur;
+        if (loopActive && activeLoopButton === btn) {
+          stopLoop();
+          return;
+        }
+        startLoop(start, end, btn);
+        if (playerReady) {
+          player.seekTo(start, true);
+          player.playVideo();
+        }
+      }
+
+      async function fetchTranscript(videoId) {
+        const res = await fetch('/api/transcript', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ids: [videoId] })
+        });
+        if (!res.ok) throw new Error('Failed to fetch transcript');
+        const data = await res.json();
+        const first = Array.isArray(data) ? data[0] : null;
+        const tracks = first && Array.isArray(first.tracks) ? first.tracks : [];
+        const transcript = tracks[0] && Array.isArray(tracks[0].transcript) ? tracks[0].transcript : [];
+        const metaEl = document.getElementById('meta');
+        metaEl.textContent = first ? (first.title || '') : '';
+        renderTranscript(transcript);
+      }
+
+      function renderTranscript(items) {
+        const container = document.getElementById('transcript');
+        container.innerHTML = '';
+        stopLoop();
+        items.forEach((item, idx) => {
+          const start = parseFloat(item.start);
+          const dur = parseFloat(item.dur);
+          const row = document.createElement('div');
+          row.className = 'line';
+          const btn = document.createElement('button');
+          btn.className = 'ts';
+          btn.textContent = formatTime(start);
+          btn.dataset.start = String(start);
+          btn.dataset.dur = String(dur);
+          btn.addEventListener('click', onClickTimestamp);
+          btn.addEventListener('dblclick', onDoubleClickTimestamp);
+          const text = document.createElement('div');
+          text.textContent = item.text || '';
+          row.appendChild(btn);
+          row.appendChild(text);
+          container.appendChild(row);
+        });
+      }
+
+      function loadVideoById(id) {
+        currentVideoId = id;
+        stopLoop();
+        if (player) {
+          player.loadVideoById(id);
+          fetchTranscript(id).catch(() => {
+            document.getElementById('transcript').innerHTML = '<div class="error">Transcript unavailable.</div>';
+          });
+          return;
+        }
+        player = new YT.Player('player', {
+          width: '100%',
+          videoId: id,
+          playerVars: { playsinline: 1 },
+          events: {
+            onReady: () => {
+              playerReady = true;
+              fetchTranscript(id).catch(() => {
+                document.getElementById('transcript').innerHTML = '<div class="error">Transcript unavailable.</div>';
+              });
+            }
+          }
+        });
+      }
+
+      function handleLoad() {
+        const inp = document.getElementById('videoInput');
+        const id = extractVideoId(inp.value);
+        if (!id) {
+          alert('Please paste a valid YouTube URL or 11-char ID.');
+          return;
+        }
+        loadVideoById(id);
+      }
+
+      document.getElementById('loadBtn').addEventListener('click', handleLoad);
+      document.getElementById('videoInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleLoad();
+      });
+
+      window.onYouTubeIframeAPIReady = function () {
+        // Ready to create player when user loads an ID
+      };
+    </script>
+  </body>
+  </html>
+
+
