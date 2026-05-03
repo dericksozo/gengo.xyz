@@ -1,31 +1,282 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>gengo.xyz</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>gengo.xyz · Language Correction Partner</title>
     <style>
       :root {
-        color-scheme: light dark;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color-scheme: dark;
+        --bg: #080808;
+        --panel: #111111;
+        --panel-2: #171717;
+        --line: #2a2a2a;
+        --text: #ececec;
+        --muted: #9d9d9d;
+        --soft: #6f6f6f;
+        --accent: #d9d9d9;
+        --good: #95d7a6;
+        --warn: #f2c777;
+        --bad: #e28e8e;
+        --radius: 14px;
       }
+
+      * { box-sizing: border-box; }
 
       body {
-        min-height: 100vh;
         margin: 0;
-        display: grid;
-        place-items: center;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Times New Roman", Georgia, serif;
       }
 
-      h1 {
-        margin: 0;
-        font-size: clamp(2.5rem, 8vw, 6rem);
-        font-weight: 700;
-        letter-spacing: 0;
+      .app {
+        display: grid;
+        grid-template-columns: 330px 1fr;
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--line);
+        background: #0c0c0c;
+        padding: 24px 18px;
+      }
+
+      .brand { font-size: 1.3rem; letter-spacing: 0.04em; margin: 0 0 20px; }
+      .upload { width: 100%; padding: 12px; border: 1px dashed var(--soft); background: #141414; color: var(--text); border-radius: 10px; cursor: pointer; }
+      .list { margin-top: 18px; display: grid; gap: 10px; }
+      .lesson {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        padding: 12px;
+        cursor: pointer;
+      }
+      .lesson.active { border-color: #595959; background: var(--panel-2); }
+      .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+      .title { margin: 0; font-size: 0.95rem; }
+      .muted { color: var(--muted); font-size: 0.8rem; margin-top: 6px; }
+      .bar { height: 7px; border-radius: 30px; background: #222; margin-top: 10px; overflow: hidden; }
+      .bar > span { display: block; height: 100%; background: linear-gradient(90deg,#5f5f5f,#d4d4d4); }
+
+      .main { padding: 28px; }
+      .header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+      .h1 { margin: 0; font-weight: 600; font-size: clamp(1.35rem, 3vw, 2rem); }
+      .sub { color: var(--muted); font-size: 0.95rem; }
+      .controls { display: flex; gap: 8px; }
+      button {
+        background: #1c1c1c;
+        color: var(--text);
+        border: 1px solid #333;
+        border-radius: 9px;
+        padding: 8px 10px;
+        cursor: pointer;
+      }
+      .cards { display: grid; gap: 14px; }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px;
+      }
+      .pill { font-size: 0.75rem; color: var(--muted); border: 1px solid #444; border-radius: 30px; padding: 3px 8px; }
+      .label { color: var(--soft); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px; }
+      .sentence { margin: 0 0 12px; line-height: 1.55; font-size: 1.02rem; }
+      .native { border-left: 2px solid #5f5f5f; padding-left: 10px; }
+      .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      .explain { background: #151515; border: 1px solid #2c2c2c; border-radius: 10px; padding: 12px; }
+      .score-box { background: #101010; border: 1px solid #2e2e2e; border-radius: 10px; padding: 12px; }
+      .score { font-size: 1.7rem; margin: 0; }
+      .status { font-size: 0.84rem; margin-top: 2px; }
+      .teacher { margin-top: 10px; padding: 10px; border-radius: 8px; border: 1px dashed #3f3f3f; display: none; }
+      .teacher.open { display: block; }
+      .loading {
+        width: 15px;
+        height: 15px;
+        border: 2px solid #6d6d6d;
+        border-top-color: transparent;
+        border-radius: 50%;
+        display: inline-block;
+        animation: spin 1s linear infinite;
+        vertical-align: middle;
+        margin-left: 6px;
+      }
+      @keyframes spin { to { transform: rotate(360deg);} }
+
+      @media (max-width: 980px) {
+        .app { grid-template-columns: 1fr; }
+        .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+        .split { grid-template-columns: 1fr; }
       }
     </style>
   </head>
   <body>
-    <h1>Hello world</h1>
+    <div class="app">
+      <aside class="sidebar">
+        <h1 class="brand">gengo.xyz</h1>
+        <button class="upload" type="button">＋ Upload conversation audio</button>
+        <div class="list" id="lessonList"></div>
+      </aside>
+
+      <main class="main">
+        <div class="header">
+          <div>
+            <h2 class="h1" id="lessonTitle"></h2>
+            <div class="sub" id="lessonMeta"></div>
+          </div>
+          <div class="controls">
+            <button type="button" id="toggleContext">Toggle teacher context</button>
+            <button type="button">Play mode</button>
+          </div>
+        </div>
+        <section class="cards" id="cards"></section>
+      </main>
+    </div>
+
+    <script>
+      const appData = {
+        lessons: [
+          {
+            id: "lesson-001",
+            title: "Preply Lesson · Keigo + Daily Life",
+            date: "May 2, 2026",
+            duration: "53 min",
+            processing: false,
+            completion: 42,
+            cards: [
+              {
+                id: "c1",
+                range: "00:01 - 00:05",
+                original: "Shiken o goukaku suru to omotte ita.",
+                slightFix: "Shiken ni goukaku suru to omotte ita.",
+                native: "Shiken ni ukaru to omotte ita.",
+                explanation: "'Goukaku suru' takes に for the exam target. Native speakers often use 'ukaru' in casual conversation.",
+                teacherContext: "Teacher: Ah, naruhodo. Demo, particle wa 'ni' ga shizen desu ne.",
+                score: 78,
+                metrics: { fluency: 80, rhythm: 75, speed: 73, completeness: 84 }
+              },
+              {
+                id: "c2",
+                range: "00:27 - 00:33",
+                original: "Futsukayoi ga hageshii kara shigoto yasunda.",
+                slightFix: "Futsukayoi ga kitsukute shigoto o yasunda.",
+                native: "Futsukayoi ga kitsukute, shigoto yasunda.",
+                explanation: "'Hageshii' sounds unnatural for hangover in this context. 'Kitsui / kitsukute' is the natural choice.",
+                teacherContext: "Teacher: Tsutawaru kedo, 'kitsui' no hou ga yoku tsukaimasu.",
+                score: 86,
+                metrics: { fluency: 86, rhythm: 84, speed: 87, completeness: 88 }
+              }
+            ]
+          },
+          {
+            id: "lesson-002",
+            title: "Cafe Chat · Casual Opinions",
+            date: "May 1, 2026",
+            duration: "46 min",
+            processing: true,
+            completion: 0,
+            cards: []
+          }
+        ]
+      };
+
+      let selectedLesson = appData.lessons[0];
+      let showTeacherContext = false;
+
+      const lessonListEl = document.getElementById("lessonList");
+      const cardsEl = document.getElementById("cards");
+      const lessonTitleEl = document.getElementById("lessonTitle");
+      const lessonMetaEl = document.getElementById("lessonMeta");
+
+      function scoreState(score) {
+        if (score >= 90) return ["Excellent", "var(--good)"];
+        if (score >= 80) return ["Strong", "var(--warn)"];
+        return ["Needs Work", "var(--bad)"];
+      }
+
+      function renderLessons() {
+        lessonListEl.innerHTML = "";
+        appData.lessons.forEach((lesson) => {
+          const item = document.createElement("button");
+          item.className = `lesson ${selectedLesson.id === lesson.id ? "active" : ""}`;
+          item.type = "button";
+          item.innerHTML = `
+            <div class="row">
+              <p class="title">${lesson.title}</p>
+              <span class="pill">${lesson.completion}%</span>
+            </div>
+            <div class="muted">${lesson.date} · ${lesson.duration} ${lesson.processing ? "<span class='loading'></span>" : ""}</div>
+            <div class="bar"><span style="width:${lesson.completion}%"></span></div>
+          `;
+          item.addEventListener("click", () => {
+            selectedLesson = lesson;
+            render();
+          });
+          lessonListEl.appendChild(item);
+        });
+      }
+
+      function renderCards() {
+        cardsEl.innerHTML = "";
+        if (!selectedLesson.cards.length) {
+          cardsEl.innerHTML = `<div class="card"><p class="sentence">Transcription + analysis is processing.<span class="loading"></span></p></div>`;
+          return;
+        }
+
+        selectedLesson.cards.forEach((card, i) => {
+          const [state, color] = scoreState(card.score);
+          const el = document.createElement("article");
+          el.className = "card";
+          el.innerHTML = `
+            <div class="row" style="margin-bottom:10px;">
+              <span class="pill">Sentence ${i + 1}</span>
+              <span class="pill">${card.range}</span>
+            </div>
+            <div class="label">What you said</div>
+            <p class="sentence">${card.original}</p>
+            <div class="label">Slightly corrected version</div>
+            <p class="sentence">${card.slightFix}</p>
+            <div class="label">How a native would usually say it</div>
+            <p class="sentence native">${card.native}</p>
+            <div class="split">
+              <div class="explain">
+                <div class="label">Why this was unnatural</div>
+                <p class="sentence" style="margin-bottom:0;">${card.explanation}</p>
+              </div>
+              <div class="score-box">
+                <div class="row">
+                  <button type="button">● Record</button>
+                  <button type="button">▶ Play clip</button>
+                </div>
+                <p class="score" style="color:${color};">${card.score}</p>
+                <div class="status">${state} · target 90+</div>
+                <div class="muted">Fluency ${card.metrics.fluency} · Rhythm ${card.metrics.rhythm} · Speed ${card.metrics.speed} · Completeness ${card.metrics.completeness}</div>
+              </div>
+            </div>
+            <div class="teacher ${showTeacherContext ? "open" : ""}">${card.teacherContext}</div>
+          `;
+          cardsEl.appendChild(el);
+        });
+      }
+
+      function renderHeader() {
+        lessonTitleEl.textContent = selectedLesson.title;
+        lessonMetaEl.textContent = `${selectedLesson.date} · ${selectedLesson.duration} · ${selectedLesson.completion}% complete`;
+      }
+
+      function render() {
+        renderLessons();
+        renderHeader();
+        renderCards();
+      }
+
+      document.getElementById("toggleContext").addEventListener("click", () => {
+        showTeacherContext = !showTeacherContext;
+        renderCards();
+      });
+
+      render();
+    </script>
   </body>
 </html>
