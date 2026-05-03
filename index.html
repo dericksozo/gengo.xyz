@@ -3,29 +3,272 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>gengo.xyz</title>
+    <title>gengo.xyz — Conversation Correction Studio</title>
     <style>
       :root {
-        color-scheme: light dark;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --bg: #050505;
+        --panel: #101010;
+        --panel-2: #141414;
+        --border: #262626;
+        --text: #f1f1f1;
+        --muted: #9a9a9a;
+        --muted-2: #727272;
+        --accent: #d9d9d9;
+        --success: #8bcf8b;
+        --warn: #d9bf8a;
+        --danger: #cf8b8b;
       }
+
+      * { box-sizing: border-box; }
 
       body {
-        min-height: 100vh;
         margin: 0;
-        display: grid;
-        place-items: center;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
       }
 
-      h1 {
-        margin: 0;
-        font-size: clamp(2.5rem, 8vw, 6rem);
-        font-weight: 700;
-        letter-spacing: 0;
+      .app {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--border);
+        background: linear-gradient(180deg, #0b0b0b 0%, #080808 100%);
+        padding: 1.25rem;
+      }
+
+      .wordmark { font-size: 1.35rem; margin: 0; letter-spacing: .04em; }
+      .sub { color: var(--muted); margin: .35rem 0 1rem; font-size: .92rem; }
+
+      .upload-panel, .lesson-list { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1rem; }
+      .upload-panel { margin-bottom: 1rem; }
+      .upload-btn {
+        width: 100%; border: 1px dashed #3a3a3a; background: #0d0d0d; color: var(--text);
+        padding: .85rem; border-radius: 10px; cursor: pointer;
+      }
+      .tiny { color: var(--muted-2); font-size: .8rem; margin: .65rem 0 0; }
+
+      .lesson-list h2, .main h2 { margin: 0 0 .85rem; font-size: 1.02rem; font-family: Inter, "Helvetica Neue", Arial, sans-serif; letter-spacing: .03em; text-transform: uppercase; color: #cfcfcf; }
+      .lesson-item {
+        border: 1px solid var(--border); background: var(--panel-2); border-radius: 10px;
+        padding: .8rem; margin-bottom: .7rem; cursor: pointer;
+      }
+      .lesson-item.active { outline: 1px solid #5a5a5a; background: #171717; }
+      .lesson-title { margin: 0 0 .35rem; font-size: .97rem; }
+      .meter { height: 7px; background: #1f1f1f; border-radius: 999px; overflow: hidden; }
+      .meter > span { display:block; height: 100%; background: linear-gradient(90deg, #666, #c8c8c8); }
+      .lesson-meta { margin-top: .45rem; color: var(--muted); font-size: .82rem; display:flex; justify-content:space-between; }
+
+      .main { padding: 1.3rem 1.5rem; }
+      .hero {
+        border: 1px solid var(--border); background: var(--panel); border-radius: 14px; padding: 1rem 1.1rem; margin-bottom: 1rem;
+      }
+      .hero-top { display:flex; justify-content: space-between; gap: 1rem; align-items: center; }
+      .hero h1 { margin: 0; font-size: 1.55rem; }
+      .hero p { margin: .35rem 0 0; color: var(--muted); max-width: 72ch; font-size: .95rem; }
+
+      .cards { display: grid; gap: .95rem; }
+      .card {
+        border: 1px solid var(--border); background: #0f0f0f; border-radius: 14px; padding: 1rem;
+      }
+      .card-top { display:flex; justify-content: space-between; align-items: center; margin-bottom: .8rem; }
+      .stamp { color: var(--muted); font-size: .84rem; }
+      .badge { font-size: .78rem; border: 1px solid #3a3a3a; color: #cfcfcf; border-radius: 999px; padding: .2rem .58rem; }
+      .line { margin: .6rem 0; }
+      .label { display:block; font-size: .76rem; color: var(--muted); letter-spacing: .03em; text-transform: uppercase; margin-bottom: .26rem; font-family: Inter, "Helvetica Neue", Arial, sans-serif; }
+      .text { margin: 0; line-height: 1.48; }
+      .text.native { color: #f4f4f4; }
+      .explain { color: #c4c4c4; background: #121212; border-left: 2px solid #626262; padding: .62rem .7rem; border-radius: 8px; }
+      .teacher { display:none; color: #bcbcbc; background: #121212; padding: .6rem .7rem; border-radius: 8px; border: 1px solid #242424; }
+      .teacher.show { display:block; }
+
+      .actions { display:flex; flex-wrap: wrap; gap: .55rem; margin-top: .85rem; }
+      button {
+        border: 1px solid #393939; background: #181818; color: var(--text); border-radius: 9px;
+        padding: .46rem .7rem; cursor:pointer; font-size: .9rem;
+      }
+      button:hover { background: #202020; }
+      .score { font-size: .9rem; color: var(--muted); }
+      .score .pass { color: var(--success); }
+      .score .mid { color: var(--warn); }
+      .score .low { color: var(--danger); }
+
+      @media (max-width: 980px) {
+        .app { grid-template-columns: 1fr; }
+        .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
       }
     </style>
   </head>
   <body>
-    <h1>Hello world</h1>
+    <div class="app">
+      <aside class="sidebar">
+        <h1 class="wordmark">gengo.xyz</h1>
+        <p class="sub">Speak first. Refine second. Build native habits.</p>
+        <section class="upload-panel">
+          <h2>Upload</h2>
+          <button class="upload-btn" type="button">+ Add conversation audio</button>
+          <p class="tiny">UI demo: upload is non-functional in this phase.</p>
+        </section>
+        <section class="lesson-list">
+          <h2>Your Sessions</h2>
+          <div id="lessonList"></div>
+        </section>
+      </aside>
+
+      <main class="main">
+        <section class="hero" id="hero"></section>
+        <section class="cards" id="cards"></section>
+      </main>
+    </div>
+
+    <script>
+      const appData = {
+        sessions: [
+          {
+            id: "jp-preply-0428",
+            title: "Preply Session — April 28",
+            language: "Japanese",
+            status: "Ready",
+            completion: 46,
+            totals: { corrected: 12, practiced: 7, score80Plus: 5 },
+            cards: [
+              {
+                id: 1,
+                start: "00:01",
+                end: "00:05",
+                severity: "Particle Fix",
+                original: "Shiken o goukaku suru tame ni benkyou shita.",
+                gentleFix: "Shiken ni goukaku suru tame ni benkyou shita.",
+                nativeAlternative: "Shiken ni ukaru tame ni benkyou shita.",
+                explanation: "'Goukaku suru' pairs naturally with the particle 'ni'. Using 'o' is understandable, but unnatural.",
+                teacherContext: "Teacher: 'Sou da ne, particle wa ni ga shizen da yo.'",
+                score: 84
+              },
+              {
+                id: 2,
+                start: "00:11",
+                end: "00:17",
+                severity: "Word Choice",
+                original: "Futsukayoi ga hageshii kara, mizu o nonda.",
+                gentleFix: "Futsukayoi ga kitsukute, mizu o takusan nonda.",
+                nativeAlternative: "Futsukayoi ga tsurakatta kara, mizu bakari nondeita.",
+                explanation: "'Hageshii' sounds off for hangovers; native speakers usually choose 'kitsui' or 'tsurai' for this feeling.",
+                teacherContext: "Teacher: 'Hageshii yori kitsui no hou ga yoku tsukau.'",
+                score: 76
+              },
+              {
+                id: 3,
+                start: "00:21",
+                end: "00:27",
+                severity: "Naturalness",
+                original: "Watashi wa kinoo tomodachi to asobi ni ikimashita.",
+                gentleFix: "Kinoo wa tomodachi to asonda.",
+                nativeAlternative: "Kinoo, tomodachi to chotto asonde kita.",
+                explanation: "Your sentence is grammatical, but the shorter structure is more conversational and natural in spoken Japanese.",
+                teacherContext: "Teacher: 'Hanashikotoba nara motto mijikaku ieru yo.'",
+                score: 91
+              }
+            ]
+          },
+          {
+            id: "jp-italki-0501",
+            title: "italki Session — May 1",
+            language: "Japanese",
+            status: "Processing",
+            completion: 0,
+            totals: { corrected: 0, practiced: 0, score80Plus: 0 },
+            cards: []
+          }
+        ]
+      };
+
+      const state = { selectedSessionId: appData.sessions[0].id };
+
+      const lessonList = document.getElementById("lessonList");
+      const hero = document.getElementById("hero");
+      const cards = document.getElementById("cards");
+
+      function scoreClass(score) { if (score >= 90) return "pass"; if (score >= 80) return "mid"; return "low"; }
+
+      function renderLessonList() {
+        lessonList.innerHTML = "";
+        appData.sessions.forEach((session) => {
+          const item = document.createElement("article");
+          item.className = `lesson-item ${session.id === state.selectedSessionId ? "active" : ""}`;
+          item.innerHTML = `
+            <h3 class="lesson-title">${session.title}</h3>
+            <div class="meter"><span style="width:${session.completion}%"></span></div>
+            <div class="lesson-meta"><span>${session.status}</span><span>${session.completion}%</span></div>
+          `;
+          item.addEventListener("click", () => {
+            state.selectedSessionId = session.id;
+            render();
+          });
+          lessonList.appendChild(item);
+        });
+      }
+
+      function renderMain() {
+        const session = appData.sessions.find((s) => s.id === state.selectedSessionId);
+        hero.innerHTML = `
+          <div class="hero-top">
+            <div>
+              <h2>Session Overview</h2>
+              <h1>${session.title}</h1>
+              <p>${session.language} • ${session.totals.corrected} corrections • ${session.totals.practiced} practiced • ${session.totals.score80Plus} at 80+ score</p>
+            </div>
+            <div class="badge">${session.status}</div>
+          </div>
+        `;
+
+        cards.innerHTML = "";
+        if (!session.cards.length) {
+          cards.innerHTML = `<article class="card"><p class="text">Audio is being transcribed and analyzed. Cards will appear here after processing.</p></article>`;
+          return;
+        }
+
+        session.cards.forEach((card) => {
+          const block = document.createElement("article");
+          block.className = "card";
+          block.innerHTML = `
+            <div class="card-top">
+              <div class="stamp">${card.start} → ${card.end}</div>
+              <span class="badge">${card.severity}</span>
+            </div>
+            <div class="line"><span class="label">What you said</span><p class="text">${card.original}</p></div>
+            <div class="line"><span class="label">Slight correction</span><p class="text">${card.gentleFix}</p></div>
+            <div class="line"><span class="label">Native phrasing</span><p class="text native">${card.nativeAlternative}</p></div>
+            <div class="line"><span class="label">Why it matters</span><p class="text explain">${card.explanation}</p></div>
+            <p class="teacher" id="teacher-${card.id}">${card.teacherContext}</p>
+            <div class="actions">
+              <button type="button">▶ Play segment</button>
+              <button type="button">⏺ Record retry</button>
+              <button type="button" data-teacher="${card.id}">Toggle teacher context</button>
+              <span class="score">Pronunciation score: <strong class="${scoreClass(card.score)}">${card.score}/100</strong></span>
+            </div>
+          `;
+          cards.appendChild(block);
+        });
+
+        cards.querySelectorAll("[data-teacher]").forEach((btn) => {
+          btn.addEventListener("click", (event) => {
+            const id = event.currentTarget.getAttribute("data-teacher");
+            const node = document.getElementById(`teacher-${id}`);
+            node.classList.toggle("show");
+          });
+        });
+      }
+
+      function render() {
+        renderLessonList();
+        renderMain();
+      }
+
+      render();
+    </script>
   </body>
 </html>
