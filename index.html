@@ -3,29 +3,312 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>gengo.xyz</title>
+    <title>gengo.xyz — Conversation Correction Studio</title>
     <style>
       :root {
-        color-scheme: light dark;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --bg: #060606;
+        --panel: #111111;
+        --panel-2: #161616;
+        --line: #2a2a2a;
+        --line-soft: #1e1e1e;
+        --text: #f2f2f2;
+        --muted: #ababab;
+        --accent: #d7d7d7;
+        --good: #a6e3a1;
+        --warn: #f9e2af;
+        --bad: #f38ba8;
       }
+
+      * { box-sizing: border-box; }
 
       body {
-        min-height: 100vh;
         margin: 0;
-        display: grid;
-        place-items: center;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Noto Serif", serif;
       }
 
-      h1 {
+      .app {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--line);
+        background: linear-gradient(180deg, #090909 0%, #0c0c0c 100%);
+        padding: 20px;
+      }
+
+      .brand { margin-bottom: 20px; }
+      .brand h1 {
         margin: 0;
-        font-size: clamp(2.5rem, 8vw, 6rem);
-        font-weight: 700;
-        letter-spacing: 0;
+        font-size: 1.35rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+      .brand p { color: var(--muted); margin: 6px 0 0; font-size: .92rem; }
+
+      .lesson-list { display: grid; gap: 12px; }
+      .lesson-item {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        padding: 12px;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .lesson-item.active { border-color: #7c7c7c; background: var(--panel-2); }
+      .lesson-row { display: flex; justify-content: space-between; gap: 8px; }
+      .lesson-name { margin: 0; font-size: .98rem; }
+      .lesson-meta { margin: 6px 0 10px; color: var(--muted); font-size: .8rem; }
+      .bar {
+        height: 8px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: #232323;
+      }
+      .fill { height: 100%; background: linear-gradient(90deg, #8f8f8f, #efefef); }
+
+      .main { padding: 24px; }
+      .header {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: rgba(6,6,6,.95);
+        backdrop-filter: blur(3px);
+        border-bottom: 1px solid var(--line-soft);
+        padding-bottom: 14px;
+        margin-bottom: 22px;
+      }
+      .header h2 { margin: 0 0 6px; font-size: 1.6rem; }
+      .header p { margin: 0; color: var(--muted); }
+
+      .cards { display: grid; gap: 16px; }
+      .card {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 12px;
+        padding: 16px;
+      }
+      .card-top { display:flex; justify-content:space-between; gap: 12px; align-items:center; }
+      .chip {
+        border: 1px solid var(--line);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: .78rem;
+      }
+      .btn {
+        border: 1px solid var(--line);
+        color: var(--text);
+        background: #1a1a1a;
+        border-radius: 8px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+      .panel {
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        padding: 12px;
+        background: #121212;
+      }
+      .label { margin: 0 0 6px; color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+      .sentence { margin: 0; font-size: 1rem; line-height: 1.45; }
+      .score { margin-top: 12px; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: .92rem; }
+      .score.good { color: var(--good); }
+      .score.warn { color: var(--warn); }
+      .score.bad { color: var(--bad); }
+      .explain { margin-top: 12px; color: #d8d8d8; }
+      .teacher {
+        margin-top: 12px;
+        border-top: 1px dashed #333;
+        padding-top: 10px;
+        color: #d0d0d0;
+        display: none;
+      }
+      .teacher.show { display: block; }
+
+      @media (max-width: 980px) {
+        .app { grid-template-columns: 1fr; }
+        .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+        .main { padding-top: 10px; }
+        .grid2 { grid-template-columns: 1fr; }
       }
     </style>
   </head>
   <body>
-    <h1>Hello world</h1>
+    <div class="app">
+      <aside class="sidebar">
+        <section class="brand">
+          <h1>gengo.xyz</h1>
+          <p>Speak freely. Fix naturally. Repeat with feedback.</p>
+        </section>
+        <section id="lessonList" class="lesson-list"></section>
+      </aside>
+
+      <main class="main">
+        <header class="header">
+          <h2 id="lessonTitle"></h2>
+          <p id="lessonMeta"></p>
+        </header>
+        <section id="cards" class="cards"></section>
+      </main>
+    </div>
+
+    <script>
+      const appData = {
+        lessons: [
+          {
+            id: "lesson_0412",
+            title: "Preply Session — April 12",
+            language: "Japanese",
+            durationLabel: "53 min",
+            completedPercent: 42,
+            processing: false,
+            items: [
+              {
+                id: "c1",
+                start: "00:01",
+                end: "00:05",
+                raw: "shiken o goukaku suru to omotte imasu",
+                lightFix: "shiken ni goukaku suru to omotte imasu",
+                native: "shiken ni ukaru tsumori desu",
+                explanation: "For passing an exam, Japanese uses に with 合格する. Your sentence is understandable, but the particle choice sounds non-native.",
+                teacherContext: "先生: うん、合格できるように頑張ろう。",
+                pronunciationScore: 78
+              },
+              {
+                id: "c2",
+                start: "00:44",
+                end: "00:49",
+                raw: "futsukayoi ga hageshii desu",
+                lightFix: "futsukayoi ga kitsui desu",
+                native: "futsukayoi ga tsurai desu",
+                explanation: "激しい describes intensity in a different way. 二日酔い usually pairs with きつい or つらい to sound natural.",
+                teacherContext: "先生: たくさん飲みましたか？",
+                pronunciationScore: 84
+              },
+              {
+                id: "c3",
+                start: "02:10",
+                end: "02:16",
+                raw: "kinou wa benkyou shiyou to shita keredo dekinakatta",
+                lightFix: "kinou wa benkyou shiyou to shita kedo dekinakatta",
+                native: "kinou wa benkyou suru tsumori datta kedo, dekinakatta",
+                explanation: "Your grammar is mostly fine; this is mainly flow. Native phrasing smooths rhythm and intent with つもりだった.",
+                teacherContext: "先生: 忙しかったんですね。",
+                pronunciationScore: 91
+              }
+            ]
+          },
+          {
+            id: "lesson_0501",
+            title: "Language Exchange — May 1",
+            language: "Japanese",
+            durationLabel: "34 min",
+            completedPercent: 0,
+            processing: true,
+            items: []
+          }
+        ]
+      };
+
+      const lessonList = document.getElementById("lessonList");
+      const lessonTitle = document.getElementById("lessonTitle");
+      const lessonMeta = document.getElementById("lessonMeta");
+      const cards = document.getElementById("cards");
+      let selectedLessonId = appData.lessons[0].id;
+
+      function scoreBand(score) {
+        if (score >= 90) return "good";
+        if (score >= 80) return "warn";
+        return "bad";
+      }
+
+      function renderLessons() {
+        lessonList.innerHTML = "";
+        appData.lessons.forEach((lesson) => {
+          const div = document.createElement("article");
+          div.className = `lesson-item ${lesson.id === selectedLessonId ? "active" : ""}`;
+          div.innerHTML = `
+            <div class="lesson-row">
+              <p class="lesson-name">${lesson.title}</p>
+              <span class="chip">${lesson.completedPercent}%</span>
+            </div>
+            <p class="lesson-meta">${lesson.language} · ${lesson.durationLabel} ${lesson.processing ? "· processing…" : ""}</p>
+            <div class="bar"><div class="fill" style="width:${lesson.completedPercent}%"></div></div>
+          `;
+          div.addEventListener("click", () => {
+            selectedLessonId = lesson.id;
+            renderLessons();
+            renderLessonDetails();
+          });
+          lessonList.appendChild(div);
+        });
+      }
+
+      function renderLessonDetails() {
+        const lesson = appData.lessons.find((x) => x.id === selectedLessonId);
+        lessonTitle.textContent = lesson.title;
+        lessonMeta.textContent = `${lesson.language} · ${lesson.durationLabel} · ${lesson.completedPercent}% completed loop`;
+
+        if (lesson.processing) {
+          cards.innerHTML = `<article class="card"><p class="sentence">Audio uploaded. Processing transcript, speaker labels, corrections, and pronunciation tasks…</p></article>`;
+          return;
+        }
+
+        cards.innerHTML = "";
+        lesson.items.forEach((item) => {
+          const card = document.createElement("article");
+          card.className = "card";
+          card.innerHTML = `
+            <div class="card-top">
+              <span class="chip">${item.start} → ${item.end}</span>
+              <div>
+                <button class="btn" data-action="play">Play clip</button>
+                <button class="btn" data-action="context">Teacher context</button>
+              </div>
+            </div>
+            <div class="grid2">
+              <div class="panel">
+                <p class="label">What you said</p>
+                <p class="sentence">${item.raw}</p>
+              </div>
+              <div class="panel">
+                <p class="label">Slight correction</p>
+                <p class="sentence">${item.lightFix}</p>
+              </div>
+            </div>
+            <div class="panel" style="margin-top:12px">
+              <p class="label">Native phrasing</p>
+              <p class="sentence">${item.native}</p>
+              <p class="score ${scoreBand(item.pronunciationScore)}">Pronunciation score: ${item.pronunciationScore}/100</p>
+              <p class="explain">${item.explanation}</p>
+              <button class="btn" data-action="record" style="margin-top:8px">Record retry</button>
+              <div class="teacher">${item.teacherContext}</div>
+            </div>
+          `;
+
+          card.addEventListener("click", (event) => {
+            const action = event.target.dataset.action;
+            if (!action) return;
+            if (action === "play") event.target.textContent = "Playing…";
+            if (action === "record") event.target.textContent = "Recording…";
+            if (action === "context") {
+              const teacher = card.querySelector(".teacher");
+              teacher.classList.toggle("show");
+            }
+          });
+
+          cards.appendChild(card);
+        });
+      }
+
+      renderLessons();
+      renderLessonDetails();
+    </script>
   </body>
 </html>
