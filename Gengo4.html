@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gengo — AI Language Partner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=DM+Mono:wght@300;400;500&family=Noto+Serif+JP:wght@300;400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <template id="__bundler_thumbnail" data-bg-color="#f2ede4">
+    <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+      <rect width="400" height="300" fill="#f2ede4"/>
+      <text x="200" y="88" text-anchor="middle" font-family="serif" font-size="18" fill="#9a8f7a" letter-spacing="8">言語</text>
+      <text x="200" y="128" text-anchor="middle" font-family="serif" font-size="42" font-weight="300" fill="#1c1710" letter-spacing="-1">Gengo</text>
+      <g transform="translate(40,160)">
+        <rect x="0"   y="0" width="40" height="4" rx="2" fill="#2c5cf5"/>
+        <rect x="46"  y="0" width="40" height="4" rx="2" fill="#2a7a42"/>
+        <rect x="92"  y="0" width="40" height="4" rx="2" fill="#2a7a42"/>
+        <rect x="138" y="0" width="40" height="4" rx="2" fill="rgba(80,60,20,0.17)"/>
+        <rect x="184" y="0" width="40" height="4" rx="2" fill="#2a7a42"/>
+        <rect x="230" y="0" width="40" height="4" rx="2" fill="rgba(80,60,20,0.17)"/>
+        <rect x="276" y="0" width="40" height="4" rx="2" fill="rgba(80,60,20,0.17)"/>
+      </g>
+      <rect x="40" y="186" width="320" height="72" rx="10" fill="#faf8f3" stroke="rgba(80,60,20,0.12)" stroke-width="1"/>
+      <rect x="56" y="202" width="60" height="7" rx="3" fill="rgba(80,60,20,0.12)"/>
+      <rect x="56" y="217" width="200" height="16" rx="4" fill="rgba(80,60,20,0.18)"/>
+    </svg>
+  </template>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; }
+    body { overflow: hidden; background: #f2ede4; font-family: 'DM Sans', sans-serif; }
+
+    @keyframes fadeUp   { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeIn   { from{opacity:0} to{opacity:1} }
+    @keyframes slideInR { from{opacity:0;transform:translateX(36px)} to{opacity:1;transform:translateX(0)} }
+    @keyframes slideInL { from{opacity:0;transform:translateX(-36px)} to{opacity:1;transform:translateX(0)} }
+    @keyframes pulse    { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.7;transform:scale(0.97)} }
+    @keyframes bloomIn  { from{opacity:0;transform:scale(0.92)} to{opacity:1;transform:scale(1)} }
+    @keyframes wave     { 0%,100%{transform:scaleY(.2)} 50%{transform:scaleY(1)} }
+    @keyframes expandDown { from{opacity:0;max-height:0} to{opacity:1;max-height:400px} }
+
+    .enter-right { animation: slideInR 0.36s cubic-bezier(.22,1,.36,1) both; }
+    .enter-left  { animation: slideInL 0.36s cubic-bezier(.22,1,.36,1) both; }
+    .enter-up    { animation: fadeUp   0.36s cubic-bezier(.22,1,.36,1) both; }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 2px; }
+    .no-scrollbar { scrollbar-width: none; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+
+    button { font-family: 'DM Sans', sans-serif; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+// ── Palette ──────────────────────────────────────────────────
+const C = {
+  bg:        '#f2ede4',
+  bg2:       '#ece7dc',
+  bg3:       '#e4dece',
+  paper:     '#faf8f3',
+  ink:       '#1c1710',
+  ink2:      '#5a5040',
+  ink3:      '#9a8f7a',
+  border:    'rgba(80,60,20,0.09)',
+  border2:   'rgba(80,60,20,0.17)',
+  blue:      '#2c5cf5',
+  blueBg:    'rgba(44,92,245,0.08)',
+  green:     '#2a7a42',
+  greenBg:   'rgba(42,122,66,0.09)',
+  greenLight:'rgba(42,122,66,0.18)',
+  amber:     '#b07020',
+  amberBg:   'rgba(176,112,32,0.09)',
+  red:       '#c23b22',
+  redBg:     'rgba(194,59,34,0.08)',
+};
+
+// ── Sample data ──────────────────────────────────────────────
+const SENTENCES = [
+  { id:1,  correct:false, start:'0:12', dur:'6s', tag:'particle',
+    original:'試験を合格する予定です。',
+    corrected_slight:'試験に合格する予定です。',
+    corrected_native:'試験、受かりそうです。',
+    expl_jp:'「合格する」には助詞「に」が必要です。ネイティブは「受かる」をよく使います。',
+    expl_en:'「合格する」requires 「に」, not 「を」. Natives prefer 「受かる」in casual speech.' },
+  { id:2,  correct:true,  start:'0:41', dur:'4s', tag:null,
+    original:'今日はとても疲れました。' },
+  { id:3,  correct:false, start:'1:03', dur:'5s', tag:'word choice',
+    original:'二日酔いが激しいです。',
+    corrected_slight:'二日酔いがひどいです。',
+    corrected_native:'二日酔いがきついですね〜。',
+    expl_jp:'「激しい」は動きや音の強さを表す言葉。二日酔いには「きつい」や「ひどい」が自然です。',
+    expl_en:'「激しい」describes movement intensity. For hangovers, use 「きつい」or 「ひどい」.' },
+  { id:4,  correct:true,  start:'1:34', dur:'7s', tag:null,
+    original:'週末に友達と映画を見に行きました。' },
+  { id:5,  correct:true,  start:'2:10', dur:'4s', tag:null,
+    original:'それはちょっと難しいと思います。' },
+  { id:6,  correct:false, start:'2:44', dur:'8s', tag:'grammar',
+    original:'毎朝、私は早く起きることを努力します。',
+    corrected_slight:'毎朝、早起きするように努力しています。',
+    corrected_native:'毎朝早起きしようと頑張ってるんですよね。',
+    expl_jp:'「〜することを努力する」は直訳的。「〜するように努力する」が自然です。',
+    expl_en:'「〜することを努力する」is a literal translation. Use 「〜するように努力する」.' },
+  { id:7,  correct:true,  start:'3:22', dur:'5s', tag:null,
+    original:'もう少し時間をもらえますか？' },
+  { id:8,  correct:false, start:'4:10', dur:'6s', tag:'naturalness',
+    original:'彼女は料理が上手いと思っています。',
+    corrected_slight:'彼女は料理が上手だと思っています。',
+    corrected_native:'彼女、料理うまいよね。',
+    expl_jp:'「上手い」より「上手だ」が標準的。会話ではもっとシンプルに話します。',
+    expl_en:'「上手だ」is standard. In casual speech, simplify dramatically.' },
+  { id:9,  correct:true,  start:'4:55', dur:'9s', tag:null,
+    original:'先生の説明はとてもわかりやすかったです。' },
+  { id:10, correct:false, start:'5:30', dur:'5s', tag:'particle',
+    original:'東京へ行くが好きです。',
+    corrected_slight:'東京に行くのが好きです。',
+    corrected_native:'東京行くの好きなんですよね。',
+    expl_jp:'「へ行くが」ではなく「に行くのが」が正しい形です。',
+    expl_en:'Use 「に行くのが」not 「へ行くが」. The nominalizer 「の」is needed.' },
+  { id:11, correct:true,  start:'6:02', dur:'4s', tag:null,
+    original:'昨日、雨がたくさん降りました。' },
+  { id:12, correct:false, start:'6:33', dur:'5s', tag:'naturalness',
+    original:'映画を見ることが好きです。',
+    corrected_slight:'映画を見るのが好きです。',
+    corrected_native:'映画見るの好きなんですよ。',
+    expl_jp:'「〜のが好き」の方が口語的で自然です。',
+    expl_en:'「〜のが好き」sounds far more natural in conversation.' },
+  { id:13, correct:true,  start:'7:15', dur:'6s', tag:null,
+    original:'来年、日本に旅行したいと思っています。' },
+  { id:14, correct:true,  start:'7:50', dur:'3s', tag:null,
+    original:'この本はとても面白いです。' },
+  { id:15, correct:false, start:'8:20', dur:'7s', tag:'word choice',
+    original:'彼は非常に賢い人間です。',
+    corrected_slight:'彼はとても賢い人です。',
+    corrected_native:'彼、めちゃくちゃ頭いいんですよね。',
+    expl_jp:'「非常に」は書き言葉的。会話では「とても」や「めちゃくちゃ」が自然です。',
+    expl_en:'「非常に」is formal/written. In speech, use 「とても」or 「めちゃくちゃ」.' },
+  { id:16, correct:true,  start:'9:05', dur:'5s', tag:null,
+    original:'今週末は何か予定がありますか？' },
+  { id:17, correct:false, start:'9:40', dur:'6s', tag:'grammar',
+    original:'日本語を勉強してから三年になります。',
+    corrected_slight:'日本語を勉強して三年になります。',
+    corrected_native:'日本語やって三年になりますね。',
+    expl_jp:'「〜してから」は「してから後に」という意味。ここでは「〜して」だけで十分です。',
+    expl_en:'「〜してから」implies "after doing X". Here, just 「〜して」is correct.' },
+  { id:18, correct:true,  start:'10:15', dur:'3s', tag:null,
+    original:'その映画はもう見ました。' },
+  { id:19, correct:false, start:'10:50', dur:'8s', tag:'naturalness',
+    original:'私はコーヒーを飲むことをとても楽しみます。',
+    corrected_slight:'私はコーヒーを飲むのをとても楽しみます。',
+    corrected_native:'コーヒー飲むの大好きなんですよね。',
+    expl_jp:'「〜することを楽しむ」は直訳的。「〜のが好き」や「楽しみ」が自然です。',
+    expl_en:'「〜することを楽しむ」is a literal translation pattern. Use 「〜のが好き」.' },
+  { id:20, correct:true,  start:'11:30', dur:'4s', tag:null,
+    original:'今日はありがとうございました！' },
+];
+
+const PAST_SESSIONS = [
+  { id:'s1', title:'Preply with Yuki', date:'May 1, 2026', sentences:20, correct:13, improved:7, avgScore:84 },
+  { id:'s2', title:'Conversation with Kenji', date:'Apr 28, 2026', sentences:15, correct:10, improved:5, avgScore:78 },
+  { id:'s3', title:'iTalki lesson', date:'Apr 24, 2026', sentences:24, correct:16, improved:8, avgScore:91 },
+  { id:'s4', title:'Coffee chat with Yuki', date:'Apr 20, 2026', sentences:11, correct:8, improved:3, avgScore:88 },
+  { id:'s5', title:'Grammar review', date:'Apr 15, 2026', sentences:18, correct:11, improved:7, avgScore:76 },
+];
+
+// ── Tag metadata ─────────────────────────────────────────────
+const TAG_META = {
+  particle:     { color:'#2c5cf5', bg:'rgba(44,92,245,0.09)',  label:'助詞 particle' },
+  'word choice':{ color:'#b07020', bg:'rgba(176,112,32,0.09)', label:'語彙 word choice' },
+  grammar:      { color:'#c23b22', bg:'rgba(194,59,34,0.08)',  label:'文法 grammar' },
+  naturalness:  { color:'#2a7a42', bg:'rgba(42,122,66,0.09)',  label:'自然さ natural' },
+};
+
+// ── Icons ────────────────────────────────────────────────────
+const Mic     = ({sz=20,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>;
+const StopI   = ({sz=18,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill={col}><rect x="4" y="4" width="16" height="16" rx="2.5"/></svg>;
+const PlayI   = ({sz=16,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill={col}><polygon points="5 3 19 12 5 21 5 3"/></svg>;
+const ChkI    = ({sz=16,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>;
+const ArrR    = ({sz=18,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
+const ArrL    = ({sz=18,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>;
+const UploadI = ({sz=28,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
+const RefI    = ({sz=14,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>;
+const StarI   = ({sz=12,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill={col}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
+const SpeakerI= ({sz=16,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>;
+
+// ── Waveform ─────────────────────────────────────────────────
+const Waveform = ({ active, color=C.blue, size='md' }) => {
+  const h = size === 'sm' ? 16 : 24;
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:2, height:h }}>
+      {[0,1,2,3,4,3,2].map((d,i) => (
+        <div key={i} style={{
+          width: size==='sm'?2:3, height:'100%',
+          background: color, borderRadius:2,
+          transformOrigin:'center',
+          animation: active ? `wave ${0.5+i*0.08}s ease-in-out ${i*0.06}s infinite alternate` : 'none',
+          transform: active ? undefined : 'scaleY(0.2)',
+          opacity: active ? 0.85 : 0.3,
+          transition:'opacity 0.3s',
+        }}/>
+      ))}
+    </div>
+  );
+};
+
+// ── Score ring ────────────────────────────────────────────────
+const ScoreRing = ({ score, size=88 }) => {
+  const stroke=6, r=(size-stroke)/2, circ=2*Math.PI*r;
+  const col = score>=80?C.green:score>=70?C.amber:C.red;
+  return (
+    <div style={{ position:'relative', width:size, height:size, flexShrink:0 }}>
+      <svg width={size} height={size} style={{transform:'rotate(-90deg)'}}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.border2} strokeWidth={stroke}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={col} strokeWidth={stroke}
+          strokeDasharray={`${(score/100)*circ} ${circ}`} strokeLinecap="round"
+          style={{transition:'stroke-dasharray 1s cubic-bezier(.4,0,.2,1)'}}/>
+      </svg>
+      <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ fontSize:size*0.26, fontWeight:600, color:col, fontFamily:"'DM Mono',monospace", lineHeight:1 }}>{score}</div>
+      </div>
+    </div>
+  );
+};
+
+// ── Progress bar strip (Gengo2 style — slim bars, full width) ─
+const ProgressStrip = ({ sentences, current, onJump }) => (
+  <div style={{ display:'flex', alignItems:'center', gap:4, flex:1 }}>
+    {sentences.map((s, i) => {
+      const isCurrent = i === current;
+      const isCorrect = s.correct;
+      const isDone    = !s.correct && s._done;
+      let bg;
+      if (isCurrent)      bg = C.blue;
+      else if (isCorrect) bg = C.green;
+      else if (isDone)    bg = C.greenLight;
+      else                bg = C.border2;
+
+      return (
+        <button
+          key={s.id}
+          onClick={() => onJump(i)}
+          title={s.correct ? `${s.start} · Correct ✓` : `${s.start} · ${s.tag || 'review'}`}
+          style={{
+            flex:1, height:4, borderRadius:2, border:'none',
+            background: bg, cursor:'pointer', padding:0,
+            transition:'background 0.3s ease',
+          }}
+        />
+      );
+    })}
+  </div>
+);
+
+// ── Processing screen ─────────────────────────────────────────
+const ProcessingScreen = ({ title, onDone }) => {
+  const [step, setStep] = useState(0);
+  const steps = ['Transcribing audio…','Isolating your voice…','Analyzing Japanese…','Generating feedback…','Done'];
+  useEffect(() => {
+    if (step >= steps.length-1) { setTimeout(onDone, 700); return; }
+    const t = setTimeout(() => setStep(s=>s+1), 850+step*150);
+    return () => clearTimeout(t);
+  }, [step]);
+  const pct = Math.round((step/(steps.length-1))*100);
+  return (
+    <div style={{ height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:C.bg, gap:32, animation:'fadeIn 0.4s ease' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ fontSize:22, fontWeight:400, color:C.ink, fontFamily:"'Newsreader',serif", marginBottom:6 }}>Analyzing your session…</div>
+        <div style={{ fontSize:13, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{title}</div>
+      </div>
+      <div style={{ position:'relative', width:108, height:108 }}>
+        <svg width={108} height={108} style={{transform:'rotate(-90deg)'}}>
+          <circle cx={54} cy={54} r={48} fill="none" stroke={C.border2} strokeWidth={5}/>
+          <circle cx={54} cy={54} r={48} fill="none" stroke={C.blue} strokeWidth={5}
+            strokeDasharray={`${(pct/100)*301.6} 301.6`} strokeLinecap="round"
+            style={{transition:'stroke-dasharray 0.6s ease'}}/>
+        </svg>
+        <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, fontWeight:600, color:C.ink, fontFamily:"'DM Mono',monospace" }}>{pct}%</div>
+      </div>
+      <div style={{ fontSize:14, color:C.blue, fontFamily:"'DM Mono',monospace", animation:'pulse 1.5s ease infinite' }}>{steps[step]}</div>
+    </div>
+  );
+};
+
+// ── Shared TopBar ─────────────────────────────────────────────
+const TopBar = ({ sentences, current, onJump }) => (
+  <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 20px 10px', flexShrink:0 }}>
+    <ProgressStrip sentences={sentences} current={current} onJump={onJump}/>
+    <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink3, flexShrink:0, whiteSpace:'nowrap' }}>
+      {current+1} / {sentences.length}
+    </div>
+  </div>
+);
+
+// ── Shared BottomNav ──────────────────────────────────────────
+const BottomNav = ({ index, total, onNext, onPrev, canAdvance, isCorrect }) => {
+  const isLast = index === total-1;
+  const nextOk = isCorrect || canAdvance;
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 20px', borderTop:`1px solid ${C.border}`, background:C.paper, flexShrink:0 }}>
+      <button onClick={onPrev} disabled={index===0} style={{
+        display:'flex', alignItems:'center', gap:6, background:'none',
+        border:`1px solid ${C.border2}`, borderRadius:8, padding:'9px 16px',
+        cursor:index===0?'default':'pointer', color:C.ink2, fontSize:13,
+        opacity:index===0?0.3:1, transition:'opacity 0.15s',
+      }}><ArrL sz={15} col={C.ink2}/> Prev</button>
+
+      {isLast && nextOk ? (
+        <button onClick={onNext} style={{
+          display:'flex', alignItems:'center', gap:6, background:C.green, color:'#fff',
+          border:'none', borderRadius:8, padding:'9px 20px', cursor:'pointer',
+          fontSize:13, fontWeight:600,
+        }}>Finish <ChkI sz={13} col="#fff"/></button>
+      ) : (
+        <button onClick={nextOk ? onNext : undefined} style={{
+          display:'flex', alignItems:'center', gap:6,
+          background: nextOk ? C.ink : 'transparent',
+          color: nextOk ? C.bg : C.border2,
+          border:`1px solid ${nextOk ? C.ink : C.border2}`,
+          borderRadius:8, padding:'9px 20px',
+          cursor:nextOk?'pointer':'default',
+          fontSize:13, fontWeight:600,
+          opacity:nextOk?1:0.4, transition:'all 0.2s',
+        }}>Next <ArrR sz={15} col={nextOk?C.bg:C.border2}/></button>
+      )}
+    </div>
+  );
+};
+
+// ── CORRECT CARD ──────────────────────────────────────────────
+const CorrectCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, sentences }) => {
+  const [playOwn, setPlayOwn] = useState(false);
+  const animClass = direction==='right'?'enter-right':direction==='left'?'enter-left':'enter-up';
+
+  const handlePlay = () => { setPlayOwn(true); setTimeout(()=>setPlayOwn(false), 2200); };
+
+  return (
+    <div className={animClass} style={{ height:'100%', display:'flex', flexDirection:'column', background:C.bg }}>
+      <TopBar sentences={sentences} current={index} onJump={onJump}/>
+
+      {/* Content — top-left aligned, same layout as FocusCard */}
+      <div style={{ flex:1, overflowY:'auto', padding:'16px clamp(20px,6vw,100px) 28px', display:'flex', flexDirection:'column', gap:24 }}>
+
+        {/* Tag chip */}
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <span style={{
+            padding:'3px 12px', borderRadius:100,
+            background:C.greenBg, color:C.green,
+            fontSize:12, fontWeight:600,
+          }}>✓ correct</span>
+          <span style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sentence.start}</span>
+        </div>
+
+        {/* What you said — header matches FocusCard */}
+        <div>
+          <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:12 }}>
+            You got this one right
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+            <div style={{ fontSize:'clamp(22px,4vw,38px)', fontFamily:"'Noto Serif JP',serif", color:C.ink, lineHeight:1.85, fontWeight:400 }}>
+              {sentence.original}
+            </div>
+            {/* Play icon + duration inline */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+              <button
+                onClick={handlePlay}
+                title="Play your clip"
+                style={{
+                  width:34, height:34, borderRadius:'50%', border:`1px solid ${C.border2}`,
+                  background: playOwn ? C.greenBg : C.paper,
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  cursor:'pointer', transition:'all 0.15s', flexShrink:0,
+                }}
+              >
+                {playOwn ? <Waveform active size="sm" color={C.green}/> : <PlayI sz={13} col={C.ink3}/>}
+              </button>
+              <span style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sentence.dur}</span>
+            </div>
+          </div>
+          <div style={{ marginTop:12, fontSize:14, color:C.ink3, lineHeight:1.7, maxWidth:480 }}>
+            This sentence was natural and correct. Keep it up — your instincts are improving.
+          </div>
+        </div>
+      </div>
+
+      <BottomNav index={index} total={total} onNext={onNext} onPrev={onPrev} canAdvance={false} isCorrect={true}/>
+    </div>
+  );
+};
+
+// ── FOCUS CARD (needs improvement) ───────────────────────────
+const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, sentences }) => {
+  const [showCorrections, setShowCorrections] = useState(false);
+  const [recording, setRec]   = useState(false);
+  const [recSecs, setRecSecs] = useState(0);
+  const [scored, setScored]   = useState(false);
+  const [score, setScore]     = useState(null);
+  const [playNative, setPlayNative] = useState(false);
+  const [playOwn, setPlayOwn]       = useState(false);
+  const timerRef = useRef();
+  const animClass = direction==='right'?'enter-right':direction==='left'?'enter-left':'enter-up';
+  const tag = TAG_META[sentence.tag] || TAG_META.naturalness;
+  const canAdvance = scored && score >= 80;
+
+  const startRec = () => { setRec(true); setRecSecs(0); timerRef.current = setInterval(()=>setRecSecs(s=>s+1),1000); };
+  const stopRec  = () => {
+    clearInterval(timerRef.current); setRec(false);
+    setTimeout(()=>{ const s=Math.floor(72+Math.random()*26); setScore(s); setScored(true); }, 1100);
+  };
+  const handlePlayNative = () => { setPlayNative(true); setTimeout(()=>setPlayNative(false), 2400); };
+  const handlePlayOwn    = () => { setPlayOwn(true);   setTimeout(()=>setPlayOwn(false),   2000); };
+  const handlePlayClip   = () => { setPlayOwn(true);   setTimeout(()=>setPlayOwn(false),   2000); };
+
+  const sub = scored ? {
+    fluency:      Math.min(100, Math.round(score*(0.9+Math.random()*0.16))),
+    completeness: Math.min(100, Math.round(score*(0.88+Math.random()*0.16))),
+    rhythm:       Math.min(100, Math.round(score*(0.86+Math.random()*0.16))),
+  } : null;
+
+  return (
+    <div key={sentence.id} className={animClass} style={{ height:'100%', display:'flex', flexDirection:'column', background:C.bg, overflow:'hidden' }}>
+      <TopBar sentences={sentences} current={index} onJump={onJump}/>
+
+      <div style={{ flex:1, overflowY:'auto', padding:'4px clamp(20px,6vw,100px) 28px', display:'flex', flexDirection:'column', gap:24 }}>
+
+        {/* Tag + timestamp */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+          <span style={{ padding:'3px 12px', borderRadius:100, background:tag.bg, color:tag.color, fontSize:12, fontWeight:600 }}>{tag.label}</span>
+          <span style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sentence.start}</span>
+        </div>
+
+        {/* What you said */}
+        <div>
+          <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:12 }}>
+            What you said
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+            <div style={{
+              fontSize:'clamp(22px,4vw,38px)', fontFamily:"'Noto Serif JP',serif",
+              color: showCorrections ? C.ink2 : C.ink,
+              lineHeight:1.85, fontWeight:400, position:'relative',
+              transition:'color 0.3s',
+            }}>
+              {sentence.original}
+              {showCorrections && (
+                <div style={{
+                  position:'absolute', bottom:6, left:0, right:0, height:2,
+                  background:`linear-gradient(90deg,${C.amber},${C.amber}66)`,
+                  borderRadius:1,
+                }}/>
+              )}
+            </div>
+            {/* Play icon + duration — inline, icon only */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+              <button
+                onClick={handlePlayClip}
+                title="Play your clip"
+                style={{
+                  width:34, height:34, borderRadius:'50%', border:`1px solid ${C.border2}`,
+                  background: playOwn ? C.amberBg : C.paper,
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  cursor:'pointer', transition:'all 0.15s',
+                }}
+              >
+                {playOwn ? <Waveform active size="sm" color={C.amber}/> : <PlayI sz={13} col={C.ink3}/>}
+              </button>
+              <span style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sentence.dur}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Show corrections button */}
+        {!showCorrections && (
+          <button onClick={()=>setShowCorrections(true)} style={{
+            alignSelf:'flex-start', padding:'12px 28px', background:C.ink, color:C.bg,
+            border:'none', borderRadius:10, fontSize:14, fontWeight:600,
+            cursor:'pointer', transition:'opacity 0.2s',
+          }}
+            onMouseEnter={e=>e.currentTarget.style.opacity='0.8'}
+            onMouseLeave={e=>e.currentTarget.style.opacity='1'}
+          >Show corrections →</button>
+        )}
+
+        {/* Corrections revealed */}
+        {showCorrections && (
+          <div style={{ display:'flex', flexDirection:'column', gap:16, animation:'fadeUp 0.32s ease both' }}>
+
+            {/* A more natural way */}
+            <div>
+              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.amber, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:10 }}>A more natural way</div>
+              <div style={{ fontSize:'clamp(20px,3.5vw,32px)', fontFamily:"'Noto Serif JP',serif", color:C.ink, lineHeight:1.85 }}>{sentence.corrected_slight}</div>
+            </div>
+
+            {/* How a native would say it — with play + record inline */}
+            <div style={{ position:'relative', padding:'18px 20px 18px 24px', background:C.paper, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden' }}>
+              <div style={{ position:'absolute', top:0, left:0, width:3, height:'100%', background:C.green, borderRadius:'2px 0 0 2px' }}/>
+
+              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.green, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:10 }}>How a native would say it</div>
+
+              {/* Native sentence + play + record icons inline */}
+              <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginBottom: scored ? 20 : 0 }}>
+                <div style={{ fontSize:'clamp(18px,3vw,28px)', fontFamily:"'Noto Serif JP',serif", color:C.ink, lineHeight:1.85, flex:1 }}>{sentence.corrected_native}</div>
+
+                {/* Play native AI voice — icon only */}
+                <button
+                  onClick={handlePlayNative}
+                  title="Hear native pronunciation"
+                  style={{
+                    width:36, height:36, borderRadius:'50%',
+                    border:`1px solid ${C.border2}`,
+                    background: playNative ? C.greenBg : C.bg,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    cursor:'pointer', transition:'all 0.15s', flexShrink:0,
+                  }}
+                >
+                  {playNative ? <Waveform active size="sm" color={C.green}/> : <SpeakerI sz={15} col={C.green}/>}
+                </button>
+
+                {/* Record button — icon only, or with stop */}
+                <button
+                  onClick={recording ? stopRec : startRec}
+                  title={recording ? 'Stop recording' : 'Record your attempt'}
+                  style={{
+                    width:36, height:36, borderRadius:'50%', border:'none',
+                    background: recording ? C.red : C.blue,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    cursor:'pointer', flexShrink:0,
+                    boxShadow: recording ? `0 0 0 5px ${C.redBg}` : `0 0 0 5px ${C.blueBg}`,
+                    animation: recording ? 'pulse 1.4s ease infinite' : undefined,
+                    transition:'background 0.2s, box-shadow 0.2s',
+                  }}
+                >
+                  {recording ? <StopI sz={14} col="#fff"/> : <Mic sz={15} col="#fff"/>}
+                </button>
+              </div>
+
+              {recording && (
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:8, animation:'fadeIn 0.2s ease' }}>
+                  <Waveform active color={C.red}/>
+                  <span style={{ fontSize:12, color:C.red, fontFamily:"'DM Mono',monospace" }}>{recSecs}s</span>
+                </div>
+              )}
+
+              {/* Pronunciation breakdown — expands after recording */}
+              {scored && (
+                <div style={{ animation:'fadeUp 0.4s ease both', marginTop:4 }}>
+                  <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:16, display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-start' }}>
+                    <ScoreRing score={score}/>
+                    <div style={{ flex:1, minWidth:160 }}>
+                      <div style={{ fontSize:14, fontWeight:600, color:score>=80?C.green:score>=70?C.amber:C.red, marginBottom:4 }}>
+                        {score>=90?'Native-level':score>=80?'Great — moving on ✓':score>=70?'Getting closer — try again':'Keep going — you\'ll get it'}
+                      </div>
+                      <div style={{ fontSize:12, color:C.ink3, marginBottom:12, lineHeight:1.6 }}>
+                        {score>=80?'Score 80+ achieved — this card is done.':'Score 80+ to mark this done and move on.'}
+                      </div>
+
+                      {/* Pronunciation breakdown header */}
+                      <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8 }}>Pronunciation breakdown</div>
+                      {sub && (
+                        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                          {Object.entries(sub).map(([k,v])=>(
+                            <div key={k} style={{ display:'flex', alignItems:'center', gap:10 }}>
+                              <div style={{ width:84, fontSize:11, color:C.ink3, fontFamily:"'DM Mono',monospace", textTransform:'capitalize' }}>{k}</div>
+                              <div style={{ flex:1, height:3, background:C.border2, borderRadius:2 }}>
+                                <div style={{ height:'100%', width:`${v}%`, borderRadius:2, background:v>=80?C.green:v>=70?C.amber:C.red, transition:'width 0.8s ease' }}/>
+                              </div>
+                              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink2, minWidth:22, textAlign:'right' }}>{v}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Hear yourself + try again row */}
+                      <div style={{ display:'flex', gap:10, marginTop:12, flexWrap:'wrap', alignItems:'center' }}>
+                        <button onClick={handlePlayOwn} style={{
+                          display:'flex', alignItems:'center', gap:6,
+                          padding:'6px 14px', borderRadius:8, border:`1px solid ${C.border2}`,
+                          background:'none', cursor:'pointer', fontSize:12, color:C.ink2,
+                          transition:'background 0.15s',
+                        }}>
+                          <PlayI sz={11} col={playOwn?C.amber:C.ink3}/>
+                          {playOwn ? 'playing…' : 'Hear yourself'}
+                        </button>
+                        {!canAdvance && (
+                          <button onClick={()=>{setScored(false);setScore(null);}} style={{
+                            display:'flex', alignItems:'center', gap:5, background:'none',
+                            border:'none', cursor:'pointer', color:C.ink3, fontSize:12, padding:0,
+                          }}>
+                            <RefI sz={12} col={C.ink3}/> Try again
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Explanation */}
+            <div style={{ padding:'14px 18px', background:C.bg2, borderRadius:10, border:`1px solid ${C.border}` }}>
+              <div style={{ fontSize:13, fontFamily:"'Noto Serif JP',serif", color:C.ink2, lineHeight:1.9, marginBottom:8 }}>{sentence.expl_jp}</div>
+              <div style={{ fontSize:13, color:C.ink3, lineHeight:1.7, borderTop:`1px solid ${C.border}`, paddingTop:8 }}>{sentence.expl_en}</div>
+            </div>
+
+          </div>
+        )}
+      </div>
+
+      <BottomNav index={index} total={total} onNext={onNext} onPrev={onPrev} canAdvance={canAdvance} isCorrect={false}/>
+    </div>
+  );
+};
+
+// ── Session card (home) ───────────────────────────────────────
+const SessionCard = ({ session, onResume }) => {
+  const remaining = session.sentences - session.correct - session.improved;
+  return (
+    <div
+      onClick={() => onResume(session)}
+      style={{
+        background:C.paper, borderRadius:14, border:`1px solid ${C.border}`,
+        padding:'18px 20px', cursor:'pointer', transition:'box-shadow 0.2s, transform 0.2s',
+        boxShadow:'0 1px 4px rgba(0,0,0,0.04)',
+      }}
+      onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 6px 24px rgba(0,0,0,0.08)'; e.currentTarget.style.transform='translateY(-1px)'; }}
+      onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'; e.currentTarget.style.transform='none'; }}
+    >
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:600, color:C.ink, marginBottom:3 }}>{session.title}</div>
+          <div style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{session.date}</div>
+        </div>
+        {session.avgScore && (
+          <div style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 10px', borderRadius:100, background:session.avgScore>=80?C.greenBg:C.amberBg, color:session.avgScore>=80?C.green:C.amber, fontSize:12, fontWeight:600 }}>
+            <StarI sz={10} col={session.avgScore>=80?C.green:C.amber}/>
+            {session.avgScore}
+          </div>
+        )}
+      </div>
+
+      {/* Mini progress bar strip */}
+      <div style={{ display:'flex', gap:3, marginBottom:12 }}>
+        {Array.from({length:session.sentences}).map((_,i) => {
+          const isCorrect  = i < session.correct;
+          const isImproved = !isCorrect && i < session.correct + session.improved;
+          return (
+            <div key={i} style={{
+              flex:1, height:3, borderRadius:2,
+              background: isCorrect ? C.green : isImproved ? C.greenLight : C.border2,
+              border: isImproved && !isCorrect ? `1px solid ${C.green}` : 'none',
+            }}/>
+          );
+        })}
+      </div>
+
+      {/* Stats row — clear language */}
+      <div style={{ display:'flex', gap:14, fontSize:12, flexWrap:'wrap' }}>
+        <span style={{ color:C.ink3 }}><b style={{ color:C.ink2, fontFamily:"'DM Mono',monospace" }}>{session.sentences}</b> sentences</span>
+        <span style={{ color:C.ink3 }}><b style={{ color:C.green, fontFamily:"'DM Mono',monospace" }}>{session.correct}</b> already correct</span>
+        <span style={{ color:C.ink3 }}><b style={{ color:C.blue, fontFamily:"'DM Mono',monospace" }}>{session.improved}</b> improved</span>
+        {remaining > 0 && <span style={{ color:C.ink3 }}><b style={{ color:C.amber, fontFamily:"'DM Mono',monospace" }}>{remaining}</b> remaining</span>}
+        {remaining === 0 && <span style={{ color:C.green, fontFamily:"'DM Mono',monospace", fontSize:11 }}>✓ complete</span>}
+      </div>
+    </div>
+  );
+};
+
+// ── Auth menu (sign-in / profile dropdown) ───────────────────
+const AuthMenu = ({ user, onSignIn, onSignUp, onSignOut }) => {
+  const [open, setOpen]   = useState(false);
+  const [mode, setMode]   = useState('signin'); // signin | signup
+  const [email, setEmail] = useState('');
+  const [pw, setPw]       = useState('');
+  const [name, setName]   = useState('');
+  const [busy, setBusy]   = useState(false);
+  const [err, setErr]     = useState('');
+  const wrapRef = useRef();
+
+  // Close on outside click / Esc
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = e => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const onKey = e => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  const submit = (e) => {
+    e.preventDefault();
+    setErr('');
+    if (!email.includes('@')) { setErr('Please enter a valid email.'); return; }
+    if (pw.length < 6) { setErr('Password must be at least 6 characters.'); return; }
+    if (mode === 'signup' && !name.trim()) { setErr('Please enter your name.'); return; }
+    setBusy(true);
+    setTimeout(() => {
+      setBusy(false); setOpen(false);
+      const display = mode === 'signup' ? name.trim() : email.split('@')[0];
+      const u = { name: display, email };
+      if (mode === 'signup') onSignUp(u); else onSignIn(u);
+      setEmail(''); setPw(''); setName('');
+    }, 700);
+  };
+
+  // Initial / avatar
+  const initial = user ? (user.name || user.email).trim().charAt(0).toUpperCase() : '';
+
+  return (
+    <div ref={wrapRef} style={{ position:'relative' }}>
+      {/* Trigger */}
+      {user ? (
+        <button
+          onClick={() => setOpen(o => !o)}
+          title={user.name}
+          style={{
+            display:'flex', alignItems:'center', gap:8,
+            padding:'4px 10px 4px 4px', borderRadius:100,
+            background: open ? C.bg2 : C.paper, border:`1px solid ${C.border2}`,
+            cursor:'pointer', transition:'background 0.15s',
+          }}
+        >
+          <div style={{
+            width:30, height:30, borderRadius:'50%',
+            background:`linear-gradient(135deg, ${C.blue}, ${C.green})`,
+            color:'#fff', fontSize:13, fontWeight:600,
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontFamily:"'DM Sans',sans-serif",
+          }}>{initial}</div>
+          <span style={{ fontSize:12, color:C.ink2, fontWeight:500, paddingRight:4 }}>{user.name}</span>
+        </button>
+      ) : (
+        <button
+          onClick={() => { setMode('signin'); setOpen(o => !o); }}
+          style={{
+            display:'flex', alignItems:'center', gap:6,
+            padding:'8px 16px', borderRadius:100,
+            background: open ? C.ink : C.paper,
+            color: open ? C.bg : C.ink2,
+            border:`1px solid ${open ? C.ink : C.border2}`,
+            cursor:'pointer', fontSize:13, fontWeight:500,
+            transition:'all 0.15s',
+          }}
+        >Sign in</button>
+      )}
+
+      {/* Dropdown panel */}
+      {open && (
+        <div style={{
+          position:'absolute', top:'calc(100% + 10px)', right:0,
+          width: user ? 260 : 320, maxWidth:'calc(100vw - 32px)',
+          background:C.paper, border:`1px solid ${C.border}`,
+          borderRadius:14, boxShadow:'0 12px 36px rgba(0,0,0,0.12)',
+          zIndex:50, overflow:'hidden',
+          animation:'fadeUp 0.22s cubic-bezier(.22,1,.36,1) both',
+        }}>
+          {user ? (
+            // ── Logged-in: profile card ───────────────────────
+            <div>
+              <div style={{ padding:'18px 18px 14px', display:'flex', gap:12, alignItems:'center', borderBottom:`1px solid ${C.border}` }}>
+                <div style={{
+                  width:42, height:42, borderRadius:'50%',
+                  background:`linear-gradient(135deg, ${C.blue}, ${C.green})`,
+                  color:'#fff', fontSize:17, fontWeight:600,
+                  display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+                }}>{initial}</div>
+                <div style={{ minWidth:0, flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:600, color:C.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user.name}</div>
+                  <div style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user.email}</div>
+                </div>
+              </div>
+
+              {/* Mini stats */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:1, background:C.border, borderBottom:`1px solid ${C.border}` }}>
+                {[
+                  { v:'5',   l:'sessions' },
+                  { v:'58',  l:'corrected' },
+                  { v:'84',  l:'avg score' },
+                ].map(s => (
+                  <div key={s.l} style={{ background:C.paper, padding:'12px 8px', textAlign:'center' }}>
+                    <div style={{ fontSize:16, fontWeight:600, fontFamily:"'DM Mono',monospace", color:C.ink, lineHeight:1 }}>{s.v}</div>
+                    <div style={{ fontSize:10, color:C.ink3, marginTop:3, textTransform:'uppercase', letterSpacing:'0.06em' }}>{s.l}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Menu items */}
+              <div style={{ padding:'6px' }}>
+                {[
+                  { label:'Settings',     hint:'preferences, audio, language' },
+                  { label:'Subscription', hint:'free plan' },
+                  { label:'Help',         hint:'docs and support' },
+                ].map(item => (
+                  <button key={item.label}
+                    onClick={() => setOpen(false)}
+                    style={{
+                      width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center',
+                      padding:'10px 12px', background:'none', border:'none', borderRadius:8,
+                      cursor:'pointer', textAlign:'left',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = C.bg2}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <span style={{ fontSize:13, color:C.ink, fontWeight:500 }}>{item.label}</span>
+                    <span style={{ fontSize:11, color:C.ink3 }}>{item.hint}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ padding:'6px', borderTop:`1px solid ${C.border}` }}>
+                <button
+                  onClick={() => { onSignOut(); setOpen(false); }}
+                  style={{
+                    width:'100%', padding:'10px 12px', background:'none', border:'none',
+                    borderRadius:8, cursor:'pointer', fontSize:13, color:C.red, fontWeight:500, textAlign:'left',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.redBg}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >Sign out</button>
+              </div>
+            </div>
+          ) : (
+            // ── Logged-out: auth form ─────────────────────────
+            <form onSubmit={submit} style={{ padding:'18px' }}>
+              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>言語 Gengo</div>
+              <div style={{ fontSize:18, fontFamily:"'Newsreader',serif", color:C.ink, marginBottom:14, fontWeight:400 }}>
+                {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+              </div>
+
+              {/* Tab toggle */}
+              <div style={{ display:'flex', gap:4, padding:3, background:C.bg2, borderRadius:8, marginBottom:14 }}>
+                {[['signin','Sign in'],['signup','Sign up']].map(([k,l]) => (
+                  <button key={k} type="button"
+                    onClick={() => { setMode(k); setErr(''); }}
+                    style={{
+                      flex:1, padding:'7px 10px', border:'none', borderRadius:6,
+                      background: mode === k ? C.paper : 'transparent',
+                      color: mode === k ? C.ink : C.ink3,
+                      fontSize:12, fontWeight:600, cursor:'pointer',
+                      boxShadow: mode === k ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      transition:'all 0.18s',
+                    }}>{l}</button>
+                ))}
+              </div>
+
+              {/* Fields */}
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {mode === 'signup' && (
+                  <input
+                    type="text" placeholder="Your name" value={name}
+                    onChange={e => setName(e.target.value)}
+                    style={inputStyle}
+                  />
+                )}
+                <input
+                  type="email" placeholder="Email" value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  autoComplete="email"
+                  style={inputStyle}
+                />
+                <input
+                  type="password" placeholder="Password" value={pw}
+                  onChange={e => setPw(e.target.value)}
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                  style={inputStyle}
+                />
+              </div>
+
+              {err && (
+                <div style={{ marginTop:10, fontSize:12, color:C.red, fontFamily:"'DM Sans',sans-serif" }}>{err}</div>
+              )}
+
+              {mode === 'signin' && (
+                <div style={{ marginTop:8, textAlign:'right' }}>
+                  <button type="button" style={{ background:'none', border:'none', cursor:'pointer', fontSize:11, color:C.ink3, padding:0 }}>
+                    Forgot password?
+                  </button>
+                </div>
+              )}
+
+              <button type="submit" disabled={busy} style={{
+                width:'100%', marginTop:12, padding:'11px 16px',
+                background:C.ink, color:C.bg, border:'none', borderRadius:8,
+                fontSize:13, fontWeight:600, cursor: busy ? 'default' : 'pointer',
+                opacity: busy ? 0.6 : 1, transition:'opacity 0.2s',
+              }}>
+                {busy ? '…' : mode === 'signin' ? 'Sign in' : 'Create account'}
+              </button>
+
+              <div style={{ marginTop:12, fontSize:11, color:C.ink3, textAlign:'center', lineHeight:1.6 }}>
+                {mode === 'signin'
+                  ? <>New here? <button type="button" onClick={() => setMode('signup')} style={linkBtnStyle}>Create an account</button></>
+                  : <>Already have one? <button type="button" onClick={() => setMode('signin')} style={linkBtnStyle}>Sign in</button></>}
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// shared input + link styles for the auth form
+const inputStyle = {
+  width:'100%', padding:'10px 12px',
+  background:'#fff', border:'1px solid rgba(80,60,20,0.17)',
+  borderRadius:8, fontSize:13, color:'#1c1710',
+  fontFamily:"'DM Sans',sans-serif", outline:'none',
+  transition:'border-color 0.15s',
+};
+const linkBtnStyle = {
+  background:'none', border:'none', cursor:'pointer',
+  color:'#2c5cf5', fontSize:11, fontWeight:600, padding:0,
+  textDecoration:'underline', textUnderlineOffset:'2px',
+};
+
+// ── Home screen ───────────────────────────────────────────────
+const HomeScreen = ({ sessions, onUpload, onResume, user, onSignIn, onSignUp, onSignOut }) => {
+  const [drag, setDrag] = useState(false);
+  return (
+    <div style={{ height:'100%', overflowY:'auto', background:C.bg }}>
+      {/* Top bar — auth control top-right */}
+      <div style={{
+        position:'sticky', top:0, zIndex:20,
+        display:'flex', justifyContent:'flex-end',
+        padding:'14px clamp(20px,4vw,40px) 0',
+        background:`linear-gradient(180deg, ${C.bg} 70%, transparent)`,
+        pointerEvents:'none',
+      }}>
+        <div style={{ pointerEvents:'auto' }}>
+          <AuthMenu user={user} onSignIn={onSignIn} onSignUp={onSignUp} onSignOut={onSignOut}/>
+        </div>
+      </div>
+
+      <div style={{ maxWidth:680, margin:'0 auto', padding:'clamp(8px,2vw,20px) clamp(20px,4vw,40px) clamp(24px,5vw,60px)' }}>
+
+        {/* Wordmark — Gengo2 centered style */}
+        <div style={{ marginBottom:36, textAlign:'center' }}>
+          <div style={{ fontSize:11, letterSpacing:'0.22em', color:C.ink3, fontFamily:"'DM Mono',monospace", textTransform:'uppercase', marginBottom:8 }}>言語</div>
+          <div style={{ fontSize:42, fontWeight:300, color:C.ink, fontFamily:"'Newsreader',serif", letterSpacing:'-0.02em', lineHeight:1 }}>Gengo</div>
+          <div style={{ fontSize:14, color:C.ink3, marginTop:8 }}>Your AI language correction partner</div>
+        </div>
+
+        {/* Upload zone — Gengo3 slim style */}
+        <div
+          onDragOver={e=>{e.preventDefault();setDrag(true)}}
+          onDragLeave={()=>setDrag(false)}
+          onDrop={e=>{e.preventDefault();setDrag(false);onUpload('Dropped audio file');}}
+          onClick={()=>onUpload('New session')}
+          style={{
+            border:`2px dashed ${drag?C.blue:C.border2}`,
+            borderRadius:12, padding:'22px 28px',
+            display:'flex', alignItems:'center', gap:16,
+            cursor:'pointer', background:drag?C.blueBg:C.paper,
+            transition:'all 0.2s', marginBottom:32,
+          }}
+        >
+          <div style={{ color:drag?C.blue:C.ink3, transition:'color 0.2s', flexShrink:0 }}>
+            <UploadI sz={24} col={drag?C.blue:C.ink3}/>
+          </div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:14, fontWeight:500, color:C.ink, marginBottom:2 }}>Upload a new session</div>
+            <div style={{ fontSize:12, color:C.ink3 }}>Lesson recording, conversation, Zoom call — any audio</div>
+          </div>
+          <div style={{ padding:'8px 18px', background:C.ink, color:C.bg, borderRadius:8, fontSize:13, fontWeight:600, flexShrink:0 }}>Browse</div>
+        </div>
+
+        {/* Past sessions */}
+        {sessions.length > 0 && (
+          <>
+            <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:14 }}>Past sessions</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {sessions.map(s => <SessionCard key={s.id} session={s} onResume={onResume}/>)}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Summary screen ────────────────────────────────────────────
+const SummaryScreen = ({ sentences, onDone }) => {
+  const correct   = sentences.filter(s => s.correct).length;
+  const total     = sentences.length;
+  const needsWork = total - correct;
+  const practiced = sentences.filter(s => !s.correct && s._done).length || needsWork; // in real app this tracks completed
+  const pctCorrect = Math.round((correct / total) * 100);
+  const avgScore   = 83;
+  // Distinct stat: avg score breakdown
+  const topMistake = 'naturalness'; // would be computed from actual data
+
+  return (
+    <div style={{ height:'100%', overflowY:'auto', background:C.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ maxWidth:520, width:'100%', padding:'clamp(32px,6vw,64px) clamp(20px,4vw,48px)', animation:'fadeUp 0.5s ease both', textAlign:'center' }}>
+
+        <div style={{ fontSize:40, fontFamily:"'Newsreader',serif", fontWeight:300, color:C.ink, lineHeight:1.2, marginBottom:6 }}>
+          Session complete
+        </div>
+        <div style={{ fontSize:13, color:C.ink3, fontFamily:"'DM Mono',monospace", marginBottom:36 }}>
+          Preply with Yuki · May 1, 2026
+        </div>
+
+        {/* Stats grid */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:32 }}>
+          {[
+            {
+              value:`${pctCorrect}%`,
+              label:'Already correct',
+              color:C.green,
+              sub:`${correct} of ${total} sentences needed no changes`,
+            },
+            {
+              value:avgScore,
+              label:'Avg pronunciation score',
+              color:C.blue,
+              sub:'across all sentences you practiced',
+            },
+            {
+              value:practiced,
+              label:'Sentences improved',
+              color:C.amber,
+              sub:'through drill practice this session',
+            },
+            {
+              value:topMistake,
+              label:'Top pattern to work on',
+              color:C.ink2,
+              sub:'most common error type this session',
+              small:true,
+            },
+          ].map(({value,label,color,sub,small}) => (
+            <div key={label} style={{ padding:'18px 16px', background:C.paper, borderRadius:12, border:`1px solid ${C.border}`, textAlign:'center' }}>
+              <div style={{ fontSize:small?18:32, fontWeight:600, fontFamily:small?"'DM Sans',sans-serif":"'DM Mono',monospace", color, lineHeight:1, marginBottom:5, animation:'bloomIn 0.5s ease both', letterSpacing:small?'0':'-0.02em' }}>{value}</div>
+              <div style={{ fontSize:12, color:C.ink, fontWeight:500, marginBottom:3 }}>{label}</div>
+              <div style={{ fontSize:11, color:C.ink3, lineHeight:1.5 }}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Session timeline — more useful than dot grid */}
+        <div style={{ marginBottom:28 }}>
+          <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:10 }}>This session at a glance</div>
+          <div style={{ display:'flex', gap:3 }}>
+            {sentences.map((s,i) => (
+              <div key={i} title={s.correct?'Correct ✓':s.tag||'reviewed'} style={{
+                flex:1, height:8, borderRadius:2,
+                background: s.correct ? C.green : C.greenLight,
+                border: !s.correct ? `1px solid ${C.green}88` : 'none',
+                opacity: s.correct ? 1 : 0.75,
+                transition:'opacity 0.2s',
+              }}/>
+            ))}
+          </div>
+          <div style={{ display:'flex', gap:16, marginTop:8, justifyContent:'center', fontSize:11, color:C.ink3 }}>
+            <span style={{ display:'flex', alignItems:'center', gap:5 }}>
+              <div style={{ width:10,height:4,borderRadius:1,background:C.green }}/> Already correct
+            </span>
+            <span style={{ display:'flex', alignItems:'center', gap:5 }}>
+              <div style={{ width:10,height:4,borderRadius:1,background:C.greenLight,border:`1px solid ${C.green}88` }}/> Practiced &amp; improved
+            </span>
+          </div>
+        </div>
+
+        {/* Encouragement */}
+        <div style={{ padding:'14px 18px', background:C.greenBg, borderRadius:10, border:`1px solid ${C.green}22`, marginBottom:28, fontSize:13, color:C.green, lineHeight:1.7, textAlign:'left' }}>
+          {pctCorrect >= 60
+            ? `${pctCorrect}% of your sentences were already natural — your instincts are getting sharper. The patterns you drilled are exactly what your brain needs right now.`
+            : `Every sentence you just practiced came from your own speech. That's how language sticks — keep going.`}
+        </div>
+
+        <button onClick={onDone} style={{
+          padding:'13px 36px', background:C.ink, color:C.bg,
+          border:'none', borderRadius:10, fontSize:14, fontWeight:600, cursor:'pointer',
+          transition:'opacity 0.2s',
+        }}
+          onMouseEnter={e=>e.currentTarget.style.opacity='0.8'}
+          onMouseLeave={e=>e.currentTarget.style.opacity='1'}
+        >← Back to sessions</button>
+      </div>
+    </div>
+  );
+};
+
+// ── Root App ──────────────────────────────────────────────────
+const App = () => {
+  const { useTweaks, TweaksPanel, TweakSection, TweakRadio } = window.GengoTweaks3 || {};
+
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "mood": "warm",
+    "jpScale": "medium"
+  }/*EDITMODE-END*/;
+
+  const [tweaks, setTweak] = useTweaks ? useTweaks(TWEAK_DEFAULTS) : [TWEAK_DEFAULTS, ()=>{}];
+
+  const DARK = {
+    bg:'#141210', bg2:'#1c1916', bg3:'#252018', paper:'#1f1c18',
+    ink:'#ede8df', ink2:'#a09080', ink3:'#5e5448',
+    border:'rgba(255,230,180,0.07)', border2:'rgba(255,230,180,0.14)',
+    blue:'#7da4f8', blueBg:'rgba(125,164,248,0.12)',
+    green:'#50c878', greenBg:'rgba(80,200,120,0.12)', greenLight:'rgba(80,200,120,0.2)',
+    amber:'#e0a840', amberBg:'rgba(224,168,64,0.12)',
+    red:'#f07060', redBg:'rgba(240,112,96,0.12)',
+  };
+  const WARM = {
+    bg:'#f2ede4', bg2:'#ece7dc', bg3:'#e4dece', paper:'#faf8f3',
+    ink:'#1c1710', ink2:'#5a5040', ink3:'#9a8f7a',
+    border:'rgba(80,60,20,0.09)', border2:'rgba(80,60,20,0.17)',
+    blue:'#2c5cf5', blueBg:'rgba(44,92,245,0.08)',
+    green:'#2a7a42', greenBg:'rgba(42,122,66,0.09)', greenLight:'rgba(42,122,66,0.18)',
+    amber:'#b07020', amberBg:'rgba(176,112,32,0.09)',
+    red:'#c23b22', redBg:'rgba(194,59,34,0.08)',
+  };
+
+  if (tweaks.mood==='dark') Object.assign(C, DARK);
+  else Object.assign(C, WARM);
+
+  const [user, setUser]         = useState(null);
+  const [screen, setScreen]     = useState('home');
+  const [sessions, setSessions] = useState(PAST_SESSIONS);
+  const [pendingTitle, setPending] = useState('');
+  const [sentences, setSentences] = useState(SENTENCES);
+  const [cardIdx, setCardIdx]   = useState(0);
+  const [direction, setDir]     = useState('up');
+
+  const goTo   = (idx, dir) => { setDir(dir); setCardIdx(idx); };
+  const goNext = () => { if (cardIdx < sentences.length-1) goTo(cardIdx+1,'right'); else setScreen('summary'); };
+  const goPrev = () => { if (cardIdx > 0) goTo(cardIdx-1,'left'); };
+  const goJump = (idx) => goTo(idx, idx > cardIdx ? 'right' : 'left');
+
+  const handleUpload  = (title) => { setPending(title); setScreen('processing'); };
+  const handleDone    = () => { setSentences(SENTENCES); setCardIdx(0); setDir('up'); setScreen('review'); };
+  const handleResume  = () => { setSentences(SENTENCES); setCardIdx(0); setDir('up'); setScreen('review'); };
+
+  useEffect(() => {
+    const h = e => {
+      if (screen !== 'review') return;
+      if (e.key==='ArrowRight'||e.key==='ArrowDown') goNext();
+      if (e.key==='ArrowLeft' ||e.key==='ArrowUp')   goPrev();
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [screen, cardIdx]);
+
+  const cur = sentences[cardIdx];
+
+  return (
+    <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:C.bg, color:C.ink, transition:'background 0.3s, color 0.3s' }}>
+      {screen==='home'       && <HomeScreen sessions={sessions} onUpload={handleUpload} onResume={handleResume} user={user} onSignIn={setUser} onSignUp={setUser} onSignOut={()=>setUser(null)}/>}
+      {screen==='processing' && <ProcessingScreen title={pendingTitle} onDone={handleDone}/>}
+      {screen==='review'     && cur && (
+        cur.correct
+          ? <CorrectCard key={cur.id} sentence={cur} index={cardIdx} total={sentences.length} direction={direction} onNext={goNext} onPrev={goPrev} onJump={goJump} sentences={sentences}/>
+          : <FocusCard   key={cur.id} sentence={cur} index={cardIdx} total={sentences.length} direction={direction} onNext={goNext} onPrev={goPrev} onJump={goJump} sentences={sentences}/>
+      )}
+      {screen==='summary' && <SummaryScreen sentences={sentences} onDone={()=>setScreen('home')}/>}
+
+      {useTweaks && (
+        <TweaksPanel>
+          <TweakSection label="Appearance">
+            <TweakRadio id="mood" label="Mode" options={['warm','dark']} value={tweaks.mood} onChange={v=>setTweak('mood',v)}/>
+          </TweakSection>
+        </TweaksPanel>
+      )}
+    </div>
+  );
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
