@@ -75,6 +75,7 @@ db.exec(`
     lemonfox_request_json TEXT,
     lemonfox_submit_response_json TEXT,
     lemonfox_response_json TEXT,
+    lemonfox_transcript_text TEXT,
     lemonfox_error TEXT,
     file_token_hash TEXT NOT NULL UNIQUE,
     file_token_expires_at TEXT NOT NULL,
@@ -104,12 +105,63 @@ function tableColumns(table) {
   if (!columns.has('speaker_selected_at')) {
     db.exec('ALTER TABLE audio_uploads ADD COLUMN speaker_selected_at TEXT');
   }
+  if (!columns.has('lemonfox_transcript_text')) {
+    db.exec('ALTER TABLE audio_uploads ADD COLUMN lemonfox_transcript_text TEXT');
+  }
   db.exec(`
     UPDATE audio_uploads
     SET status = 'speaker_selection', updated_at = datetime('now')
     WHERE status = 'completed' AND selected_speaker IS NULL
   `);
 }
+
+function buildTranscriptText(lemonfoxResponse) {
+  const segments = Array.isArray(lemonfoxResponse?.segments) ? lemonfoxResponse.segments : [];
+  const lines = [];
+  for (const segment of segments) {
+    const speakerRaw = segment?.speaker ?? segment?.speaker_label ?? segment?.speaker_id;
+    const textRaw = segment?.text;
+    const speaker = speakerRaw === undefined || speakerRaw === null ? '' : String(speakerRaw).trim();
+    const text = textRaw === undefined || textRaw === null ? '' : String(textRaw).replace(/\s+/g, ' ').trim();
+    if (!speaker || !text) continue;
+    lines.push(`${speaker}: ${text}`);
+  }
+  return lines.join('\n');
+}
+
+function backfillTranscriptTextForExistingRows() {
+  const rows = db.prepare(`
+    SELECT id, lemonfox_response_json
+    FROM audio_uploads
+    WHERE lemonfox_response_json IS NOT NULL
+  `).all();
+
+  const update = db.prepare(`
+    UPDATE audio_uploads
+    SET lemonfox_transcript_text = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `);
+
+  db.exec('BEGIN');
+  try {
+    for (const row of rows) {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(row.lemonfox_response_json);
+      } catch {
+        parsed = null;
+      }
+      const transcriptText = buildTranscriptText(parsed);
+      update.run(transcriptText || null, row.id);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+backfillTranscriptTextForExistingRows();
 
 const statements = {
   createUser: db.prepare(`
@@ -186,7 +238,7 @@ const statements = {
   `),
   completeAudioUpload: db.prepare(`
     UPDATE audio_uploads
-    SET status = 'speaker_selection', lemonfox_response_json = ?, lemonfox_error = NULL,
+    SET status = 'speaker_selection', lemonfox_response_json = ?, lemonfox_transcript_text = ?, lemonfox_error = NULL,
         completed_at = datetime('now'), updated_at = datetime('now')
     WHERE id = ?
   `),
@@ -878,7 +930,11 @@ async function submitToLemonfox(req, upload, fileToken, callbackToken) {
 
     const status = submitResponse.text || submitResponse.segments ? 'speaker_selection' : 'processing';
     if (status === 'speaker_selection') {
-      statements.completeAudioUpload.run(JSON.stringify(submitResponse), upload.id);
+      statements.completeAudioUpload.run(
+        JSON.stringify(submitResponse),
+        buildTranscriptText(submitResponse) || null,
+        upload.id
+      );
     }
     statements.markAudioSubmitted.run(status, JSON.stringify(requestRecord), JSON.stringify(submitResponse), upload.id);
     addRequestLogEvent(req, 'lemonfox_submit_saved', {
@@ -1163,7 +1219,11 @@ async function handleAudio(req, res, url) {
     }
 
     const body = await readJsonWithLimit(req, CALLBACK_JSON_LIMIT_BYTES);
-    statements.completeAudioUpload.run(JSON.stringify(body), upload.id);
+    statements.completeAudioUpload.run(
+      JSON.stringify(body),
+      buildTranscriptText(body) || null,
+      upload.id
+    );
     addRequestLogEvent(req, 'lemonfox_callback_saved', {
       uploadId: upload.id,
       bodyKeys: Object.keys(body || {}).slice(0, 20),
