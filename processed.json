@@ -1,0 +1,1367 @@
+[
+    {
+      "original_sentence": "ボランティア活動はどうでしたか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ボランティア活動はどうでしたか？",
+      "native_speaker_version": "ボランティア活動はどうでしたか？",
+      "explanation": "自然で正しい質問文です。"
+    },
+    {
+      "original_sentence": "まだ終わってないですか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "まだ終わってないですか？",
+      "native_speaker_version": "まだ終わっていないんですか？",
+      "explanation": "ややカジュアルですが会話では問題ない表現です。「終わっていないんですか」のほうが少しだけ丁寧です。"
+    },
+    {
+      "original_sentence": "そうですね。今週ゴールデンウィークですよね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですね。今週ゴールデンウィークですよね。",
+      "native_speaker_version": "そうですね。今週はゴールデンウィークですよね。",
+      "explanation": "自然な相づちと確認表現です。「今週ゴールデンウィーク」でも口語では通じますが、「今週は」と助詞を入れるとより丁寧です。"
+    },
+    {
+      "original_sentence": "最近、ゴールデンウィークのせいで東京混んでしまって、ホテルの値段は普通と比べたら2倍か3倍くらい高くなってしまって、この1週間くらい、他のところに行ってみようかなと思います。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "最近、ゴールデンウィークのせいで東京が混んでしまって、ホテルの値段が普通と比べて2倍か3倍くらい高くなってしまったので、この1週間くらい他のところに行ってみようかなと思います。",
+      "native_speaker_version": "最近ゴールデンウィークで東京がすごく混んでいて、ホテルも普段の2倍から3倍くらいに高くなってるので、この1週間はどこか別のところに行こうかなと思っています。",
+      "explanation": "「東京混んでしまって」は「東京が混んでしまって」と助詞を補うと文法的に整います。また「普通と比べたら」もカジュアルで通じますが、「普段と比べて」のほうがこなれています。全体に長いですが、口語として自然な流れです。"
+    },
+    {
+      "original_sentence": "そうですよね。考えているのは長野市か金沢市です。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですよね。考えているのは長野市か金沢市です。",
+      "native_speaker_version": "そうなんですよ。候補は長野市か金沢市です。",
+      "explanation": "自然な同意と予定の提示です。問題ありません。"
+    },
+    {
+      "original_sentence": "長野市です。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "長野市です。",
+      "native_speaker_version": "長野市です。",
+      "explanation": "相手の確認に対する簡潔な返答で、まったく自然です。"
+    },
+    {
+      "original_sentence": "金沢の方は古い雰囲気があります。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "金沢の方は古い雰囲気があります。",
+      "native_speaker_version": "金沢は古い街並みの雰囲気がありますね。",
+      "explanation": "「古い雰囲気があります」で意味は通じます。「古い街並み」など具体化するとより自然です。"
+    },
+    {
+      "original_sentence": "そういう街に行ってみたいです。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そういう街に行ってみたいです。",
+      "native_speaker_version": "そういう街に行ってみたいですね。",
+      "explanation": "希望を述べる自然な表現です。"
+    },
+    {
+      "original_sentence": "金沢です。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "金沢です。",
+      "native_speaker_version": "金沢です。",
+      "explanation": "簡潔で自然です。"
+    },
+    {
+      "original_sentence": "横浜かどうかわからないが、金沢市は石川県の金沢市です。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "横浜かどうかわかりませんが、石川県の金沢市です。",
+      "native_speaker_version": "横浜にあるかはわからないですけど、石川県の金沢市です。",
+      "explanation": "「金沢市と石川県、金沢市」と重複があり、やや不自然です。「横浜かどうかわからないが」もカジュアルですが、文法的には正しいです。整理するとより明確になります。"
+    },
+    {
+      "original_sentence": "金沢は結構古い雰囲気です。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "金沢は結構古い雰囲気ですね。",
+      "native_speaker_version": "金沢はけっこう古い感じですよね。",
+      "explanation": "元の発話は「で、結構古い雰囲気で」と中途半端でしたが、意図は伝わります。文末を「ですね」とするだけで自然になります。"
+    },
+    {
+      "original_sentence": "金沢市はどうでしたか？",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "金沢市はどうでしたか？",
+      "native_speaker_version": "金沢市はどうでしたか？",
+      "explanation": "もともと「どうでしたか？金沢市。」と語順が倒置気味でしたが、これ自体は会話で強調としてあり得ます。自然な語順に直しました。"
+    },
+    {
+      "original_sentence": "金沢市にビーチがありますか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "金沢市にビーチがありますか？",
+      "native_speaker_version": "金沢市にビーチってあるんですか？",
+      "explanation": "言い直して正しい表現になりました。問題ありません。"
+    },
+    {
+      "original_sentence": "でもそういう雰囲気がありますね。私たちが今プレイしているゲームは中世風ですが、それはヨーロッパの昔を指している言葉ですよね。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "でもそういう雰囲気がありますね。私たちが今プレイしているゲームは中世風ですけど、それはヨーロッパの昔を指す言葉ですよね。",
+      "native_speaker_version": "でもそういう雰囲気がありますよね。今プレイしてるゲームは中世風だけど、あれってヨーロッパの昔を指す言葉ですよね。",
+      "explanation": "「中フゥセイフ」から正しい「中世風」に言い直しました。やや冗長ですが意味は明確です。「指している言葉」より「指す言葉」のほうが少し自然です。"
+    },
+    {
+      "original_sentence": "でも、日本の昔を指している言葉は何と言いますか？例えば、侍が本当に存在していた時代を指す言葉です。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "でも、日本の昔を指している言葉は何と言いますか？例えば、侍が本当に存在していた時代を指す言葉です。",
+      "native_speaker_version": "じゃあ、日本の昔を表す言葉って何ですか？例えば侍が実際にいた時代を指す言葉です。",
+      "explanation": "「日本の昔を指している言葉は何と言いますか？」はやや直訳的ですが、通じます。「侍が本当に存在していた時代」は説明的なので、「実際にいた時代」のほうが会話的です。"
+    },
+    {
+      "original_sentence": "ああ、そうですよね。そうですよね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ああ、そうですよね。そうですよね。",
+      "native_speaker_version": "ああ、そうですよね。",
+      "explanation": "共感を示す自然なあいづちです。"
+    },
+    {
+      "original_sentence": "でも本当に、金沢市に行ってみたくて、江戸時代に戻ったような雰囲気がありますよね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "でも本当に、金沢市に行ってみたくて、江戸時代に戻ったような雰囲気がありますよね。",
+      "native_speaker_version": "でも本当に金沢市に行ってみたくなりますよね。江戸時代にタイムスリップしたみたいな雰囲気があって。",
+      "explanation": "「行ってみたくて」のあとに文が続いていますが、感情の理由として自然です。"
+    },
+    {
+      "original_sentence": "侍の家のような建築が結構古くて、そう感じたいです。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "侍の家のような建物が結構古くて、そういうのを感じたいです。",
+      "native_speaker_version": "侍の屋敷みたいな古い建物があって、そういう雰囲気を味わいたいです。",
+      "explanation": "元は「侍さんの隣」「建築は結構古い」など断片的で、意図がつかみにくい部分でした。「侍さんの隣」は「侍の家」の言い間違いと思われます。「そう感じたいです」も対象が不明瞭なので「そういうのを感じたい」と補いました。"
+    },
+    {
+      "original_sentence": "日本のイメージって、背景に高い山があって、富士山のような、富士山じゃないかもしれないけど他の山があって、咲いている桜の木があって、桜の季節ではないですけど、そういうのが日本のイメージではないですか？",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "日本のイメージって、背景に高い山があって、富士山のような、富士山じゃないかもしれないけど他の山があって、咲いている桜の木があって、桜の季節ではないですけど、そういうのが日本のイメージじゃないですか？",
+      "native_speaker_version": "なんか日本のイメージって、背景に高い山、例えば富士山みたいな山があって、手前に咲いてる桜がある感じじゃないですか？桜の季節じゃないけど、そういうのがいかにも日本って感じですよね。",
+      "explanation": "「他の山がそこに置いてあって」の「置いてある」は山に対して不自然なので「あって」が適切です。全体にやや冗長ですが、口語の描写としては伝わります。"
+    },
+    {
+      "original_sentence": "そうですよね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですよね。",
+      "native_speaker_version": "そうですよね。",
+      "explanation": "共感のあいづちで自然です。"
+    },
+    {
+      "original_sentence": "誰かに言われましたね。北海道に行ったらまだ桜が咲いているらしいですよね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "誰かに言われましたね。北海道に行ったらまだ桜が咲いているらしいですよね。",
+      "native_speaker_version": "誰かに聞きましたけど、北海道だとまだ桜が咲いてるらしいですよね。",
+      "explanation": "「言われました」でも意味は通じます。「聞きました」のほうが自然です。"
+    },
+    {
+      "original_sentence": "まだホテルの予約をしていないです。実はバスのチケットか新幹線のチケットさえ買っていないです。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "まだホテルの予約をしていないです。実はバスのチケットか新幹線のチケットさえ買っていないです。",
+      "native_speaker_version": "まだホテルも予約してないんです。実はバスか新幹線のチケットすら買ってないです。",
+      "explanation": "「さえ買っていないです」は文法的に正しく、やや強調の表現です。「すら」でも同じです。自然な発言です。"
+    },
+    {
+      "original_sentence": "そうですね。はっきり決めていません。今日行こうかなと思ったんですが、やめました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですね。はっきり決めていません。今日行こうかなと思ったんですが、やめました。",
+      "native_speaker_version": "そうですね、まだはっきり決めてなくて。今日行こうかなと思ったんですけど、やめました。",
+      "explanation": "自然な口語です。「やめときました」を「やめました」にしても丁寧さは同程度です。"
+    },
+    {
+      "original_sentence": "夜10時に出発する夜行バスに乗ろうと思って、10時に新宿駅から出発する夜行バスに乗ると8時間くらいかかって、朝8時に金沢市に到着します。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "夜10時に出発する夜行バスに乗ろうと思って、新宿駅を10時に出る夜行バスだと8時間くらいかかって、朝8時に金沢市に着きます。",
+      "native_speaker_version": "夜10時発の夜行バスで行こうかなと。新宿を10時に出ると8時間くらいかかって、朝8時に金沢市に着くんです。",
+      "explanation": "「予感バス」は「夜行バス」の聞き間違い・言い間違いです。もともと「神奈川市」と言っていましたが、文脈から「金沢市」の誤りです。全体に情報が重複していますが、通じます。"
+    },
+    {
+      "original_sentence": "横尾バス？なんですか？「夜」と「行く」で「夜行バス」と呼ばれていますね。でも夜行バスじゃなくてもいいかな。特に急いでいないので新幹線に乗りたくなかったです。日本の景色を見たり楽しんだりしたかったんです。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "夜行バス？何ですか？「夜」と「行く」で「夜行バス」と呼ばれていますね。でも夜行バスじゃなくてもいいかな。特に急いでいないので新幹線に乗りたくなかったです。日本の景色を見たり楽しんだりしたかったんです。",
+      "native_speaker_version": "夜行バス？どういう意味ですか？ああ、「夜」に「行く」で「夜行バス」って言うんですね。でも別に夜行バスじゃなくてもよくて、あまり急いでないから新幹線には乗りたくなかったんです。日本の風景を楽しみたかったので。",
+      "explanation": "「横尾バス」は「夜行バス」の誤認識です。「横尾」と言ってしまった点は不自然ですが、その後正しく理解しました。「形式」ではなく「景色」と言いたかったと思われます。"
+    },
+    {
+      "original_sentence": "岐阜市は名古屋市にとても近い…でも大丈夫ですかね。そんなに遠くはないですよね。日本はそんなに大きくない国ですから、2時間以内に到着します。新幹線に乗れば2時間半以内に東京に戻ってこれます。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "岐阜市は名古屋市にとても近い…でも大丈夫ですかね。そんなに遠くはないですよね。日本はそんなに大きくない国ですから、2時間以内に着きます。新幹線に乗れば2時間半以内に東京に戻ってこれます。",
+      "native_speaker_version": "岐阜市は名古屋からすごく近いし…でも大丈夫ですよね。そんなに遠くないですし。日本ってそれほど広い国じゃないから2時間もあれば着きますし、新幹線なら2時間半あれば東京に戻って来られます。",
+      "explanation": "「そんなに多くない国」は「大きくない国」の誤り。「多くない」は数や量に使うため、国土の広さには不適切です。断片的ですが意図は通じます。"
+    },
+    {
+      "original_sentence": "浜松町？あ、浜松市ですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "浜松町？あ、浜松市ですね。",
+      "native_speaker_version": "浜松町？ああ、浜松市ですか。",
+      "explanation": "聞き返しと修正で自然です。"
+    },
+    {
+      "original_sentence": "やっぱり行く前に予約しないといけないですよね。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "やっぱり行く前に予約しないといけないですよね。",
+      "native_speaker_version": "やっぱり行く前に予約しないとダメですよね。",
+      "explanation": "「要約」と言っていましたが「予約」の誤り。それを修正した形で評価します。"
+    },
+    {
+      "original_sentence": "そうですよね、ゴールデンウィークだから。なんていうか、金沢市は外国人の観光客よりも国内の観光客が多いかもしれないですよね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですよね、ゴールデンウィークだから。なんていうか、金沢市は外国人の観光客よりも国内の観光客が多いかもしれないですよね。",
+      "native_speaker_version": "そうですよね、ゴールデンウィークですしね。金沢市は外国人の観光客より国内の観光客のほうが多いかもしれないですよね。",
+      "explanation": "「なんて言うんですか」を「なんていうか」にしているのは口語的で問題ありません。"
+    },
+    {
+      "original_sentence": "どうしてゴールデンウィークと呼ばれているんだろう？わからない。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "どうしてゴールデンウィークと呼ばれているんだろう？わからない。",
+      "native_speaker_version": "なんでゴールデンウィークって言うんでしょうね？わからないな。",
+      "explanation": "独り言として自然です。"
+    },
+    {
+      "original_sentence": "そうかもしれないですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうかもしれないですね。",
+      "native_speaker_version": "そうかもしれませんね。",
+      "explanation": "自然な同意です。"
+    },
+    {
+      "original_sentence": "シルバーウィーク。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "シルバーウィーク。",
+      "native_speaker_version": "シルバーウィーク。",
+      "explanation": "単語の確認で自然です。"
+    },
+    {
+      "original_sentence": "シルバーウィークは何月ですか？あ、9月。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "シルバーウィークは何月ですか？あ、9月。",
+      "native_speaker_version": "シルバーウィークって何月ですか？あ、9月なんですね。",
+      "explanation": "質問と納得の流れが自然です。"
+    },
+    {
+      "original_sentence": "一緒にゲームをプレイしましょうか。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "一緒にゲームをプレイしましょうか。",
+      "native_speaker_version": "一緒にゲームやりましょうか。",
+      "explanation": "丁寧で自然な誘い方です。"
+    },
+    {
+      "original_sentence": "あ、まだこのゲームをアップデートしないといけないようなメッセージが出てきて、今、更新中です。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あ、まだこのゲームをアップデートしないといけないようなメッセージが出てきて、今、更新中です。",
+      "native_speaker_version": "あ、まだゲームをアップデートしなきゃいけないみたいで、今更新してます。",
+      "explanation": "「更新、アップデート」と言い直していますが、全体として自然です。"
+    },
+    {
+      "original_sentence": "実はいろいろ考えていたんですけど、このアルビオンオンラインというゲームはもともとドイツの会社が作っているゲームですよね。だからたまに、頑張って勉強すればなんとなく理解できる日本語もありますが、不自然な日本語も出てきますよね。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "実はいろいろ考えていたんですけど、このアルビオンオンラインというゲームはもともとドイツの会社が作っているゲームですよね。だからたまに、頑張って勉強すればなんとなく理解できる日本語もありますが、不自然な日本語も出てきますよね。",
+      "native_speaker_version": "実はいろいろ考えてたんですけど、アルビオンオンラインってもともとドイツの会社が作ってるゲームじゃないですか。だから時々、頑張って読めばなんとなくわかる日本語もあるんですけど、不自然な日本語も混ざってますよね。",
+      "explanation": "「ドイツ会社に作られている」よりも「ドイツの会社が作っている」のほうが自然です。長いですが口語としては問題ありません。"
+    },
+    {
+      "original_sentence": "本当に、どうやって翻訳しているかわからないからですよね。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "本当に、どうやって翻訳しているかわからないからですよね。",
+      "native_speaker_version": "本当に、どうやって翻訳してるのかわからないですもんね。",
+      "explanation": "「どうやって翻訳しているかわからないからですよね」は少し不自然で、「どうやって翻訳しているのかわからないからですよね」のほうが正しいです。"
+    },
+    {
+      "original_sentence": "考えていたのは、スラジットさんがもうプレイしている、スクウェア・エニックスという、世界中で知られている日本の有名なゲーム会社が作ったファイナルファンタジー14というMMORPGです。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "考えていたのは、スラジットさんがもうプレイしている、スクウェア・エニックスという世界中で知られている日本の有名なゲーム会社が作ったファイナルファンタジー14というMMORPGです。",
+      "native_speaker_version": "思ったのは、スラジットさんがもうやってる、スクエニっていう世界的に有名な日本のゲーム会社が出してるファイナルファンタジー14っていうMMORPGです。",
+      "explanation": "情報を詰め込みすぎてやや冗長ですが、文法的には正しいです。「スロアジッド」は名前の聞き間違いです。"
+    },
+    {
+      "original_sentence": "そのゲームはもともと日本で作られているから、とても自然な日本語を使っているんですよね。このゲームの日本語は翻訳された日本語だから、本当に自然かどうかわからないですよね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そのゲームはもともと日本で作られているから、とても自然な日本語を使っているんですよね。このゲームの日本語は翻訳された日本語だから、本当に自然かどうかわからないですよね。",
+      "native_speaker_version": "そのゲームは日本製だから、すごく自然な日本語が使われてるんですよね。こっちのゲームは翻訳された日本語だから、本当に自然かどうかわからないですよね。",
+      "explanation": "論理的な比較で自然な表現です。"
+    },
+    {
+      "original_sentence": "ああ、ワンピースもちろん聞いたことがあります。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ああ、ワンピースもちろん聞いたことがあります。",
+      "native_speaker_version": "ああ、ワンピースならもちろん知ってます。",
+      "explanation": "「聞いたことがある」で問題ありません。"
+    },
+    {
+      "original_sentence": "ハオショク。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ハオショク。",
+      "native_speaker_version": "ハオショク。",
+      "explanation": "単語の確認で自然です。"
+    },
+    {
+      "original_sentence": "通訳者に聞いているかどうかわからないですね。多分勝手にChatGPTを使って、英語のテキストをChatGPTに入れて、日本語に翻訳してくださいって命令しているかもしれないですよね。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "通訳者に聞いているかどうかわからないですね。多分勝手にChatGPTを使って、英語のテキストをChatGPTに入れて、日本語に翻訳してくださいって命令しているかもしれないですよね。",
+      "native_speaker_version": "翻訳者に確認してるかどうかわからないですよね。たぶん勝手にChatGPTに英語の文章を入れて、「日本語に翻訳して」って指示してるだけかもしれないですし。",
+      "explanation": "「英語のテキストをチャットGPDに入れて英語に翻訳してください」は「英語から日本語へ」の誤りと思われます。また「チャットGPD」は「ChatGPT」の言い間違いですが、意味は通じます。"
+    },
+    {
+      "original_sentence": "確かにそうですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "確かにそうですね。",
+      "native_speaker_version": "確かにそうですね。",
+      "explanation": "自然な同意です。"
+    },
+    {
+      "original_sentence": "メールしたらどうですか？この翻訳は正しくないです。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "メールしたらどうですか？この翻訳は正しくないです。",
+      "native_speaker_version": "メールで指摘してみたらどうですか？この翻訳、間違ってますよって。",
+      "explanation": "提案の表現として自然です。"
+    },
+    {
+      "original_sentence": "だから、さっきスラジットさんが言った通り、翻訳された文章、ゲームに入っている文章が正しいか自然かわからないから、とりあえずこのアルビオンオンラインをチュートリアルの最後までプレイしてみて、本当にこのゲームを続けたいか判断して、もし続けたくなかったら、ファイナルファンタジー14を試してみようかなと思っています。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "だから、さっきスラジットさんが言った通り、翻訳された文章、ゲームに入っている文章が正しいか自然かわからないから、とりあえずこのアルビオンオンラインをチュートリアルの最後までプレイしてみて、本当にこのゲームを続けたいか判断して、もし続けたくなかったら、ファイナルファンタジー14を試してみようかなと思っています。",
+      "native_speaker_version": "だからさっきスラジットさんが言ったように、翻訳されたゲーム内の文章が正しいか自然かわからないから、とりあえずアルビオンオンラインのチュートリアルを最後までやってみて、本当に続けたいかどうか判断して、続けたくなかったらファイナルファンタジー14を試してみようかなって思ってます。",
+      "explanation": "長いですが、論理が一貫しており、接続も適切です。"
+    },
+    {
+      "original_sentence": "でもとりあえず、チュートリアルさえ最後までしてみましょうか。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "でもとりあえず、チュートリアルさえ最後までしてみましょうか。",
+      "native_speaker_version": "でもとりあえず、チュートリアルだけでも最後までやってみましょうか。",
+      "explanation": "「さえ」の使い方も適切で、自然な提案です。"
+    },
+    {
+      "original_sentence": "ああ、私たち今回も同じサーバーに接続しているみたいですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ああ、私たち今回も同じサーバーに接続しているみたいですね。",
+      "native_speaker_version": "あ、今回も同じサーバーにつながってますね。",
+      "explanation": "ゲーム用語として自然です。"
+    },
+    {
+      "original_sentence": "じゃあ、次は何をすればいいですか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "じゃあ、次は何をすればいいですか？",
+      "native_speaker_version": "じゃあ次は何をすればいいですか？",
+      "explanation": "自然な指示の求め方です。"
+    },
+    {
+      "original_sentence": "私はまだ完了していません。最後のThe Coveのキャプテン・ティアに戻るところです。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "私はまだ完了していません。最後のThe Coveのキャプテン・ティアに戻るところです。",
+      "native_speaker_version": "私はまだ終わってなくて、最後のThe Coveのキャプテン・ティアのところに戻るところです。",
+      "explanation": "ゲームの状況説明として自然です。"
+    },
+    {
+      "original_sentence": "私の完了ボタンがまだ赤くなっていません。ああ、その、胴装備の能力を選択しないといけないからですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "私の完了ボタンがまだ赤くなっていません。ああ、その、胴装備の能力を選択しないといけないからですね。",
+      "native_speaker_version": "私の完了ボタンがまだ赤くならないんです。ああ、胴装備のスキルを選ばないといけないからか。",
+      "explanation": "状況把握と理由の説明で自然です。"
+    },
+    {
+      "original_sentence": "インベントリを開いて、胴装備は何でしたっけ？胴装備はチェストの方で、胸の装備ですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "インベントリを開いて、胴装備って何でしたっけ？胴装備はチェストの方で、胸の装備ですね。",
+      "native_speaker_version": "インベントリを開いて、胴装備って何でしたっけ？ああ、チェストのことで、胸装備のことですね。",
+      "explanation": "ゲーム用語の確認として自然です。"
+    },
+    {
+      "original_sentence": "胴の読み方わからないですよね。胴か胴か。等装備ではなく、同装備。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "胴の読み方、わからないですよね。胴かどうか。等装備じゃなくて、胴装備。",
+      "native_speaker_version": "「胴」の読み方、難しいですよね。「どう」か「胴」か。等装備じゃなくて胴装備ですね。",
+      "explanation": "読み方の混乱をそのまま話しており、やや混乱していますが、会話としては成立しています。「同装備」は漢字変換ミスの可能性が高いです。"
+    },
+    {
+      "original_sentence": "では、キャプテン・ティアのところに戻ってきて、完了ボタンが赤くなってきて、完了ボタンを押します。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "では、キャプテン・ティアのところに戻ってきて、完了ボタンが赤くなってきたので、完了ボタンを押します。",
+      "native_speaker_version": "じゃあ、キャプテン・ティアのところに戻って、完了ボタンが赤くなったから押しますね。",
+      "explanation": "操作説明として自然です。"
+    },
+    {
+      "original_sentence": "え、新しいクエストができましたね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "え、新しいクエストができましたね。",
+      "native_speaker_version": "あ、新しいクエストが出ましたね。",
+      "explanation": "ゲーム内の通知への反応として自然です。"
+    },
+    {
+      "original_sentence": "注意を引く。計画。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「注意を引く」「計画」。",
+      "native_speaker_version": "「注意を引く」と「計画」って書いてありますね。",
+      "explanation": "ゲーム内テキストを読み上げている断片ですが、文として不完全です。"
+    },
+    {
+      "original_sentence": "君が混雑ですか？混雑ではないですね。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "君が混雑ですか？混雑ではないですね。混乱ですね。",
+      "native_speaker_version": "「君が混雑」？混雑じゃなくて混乱ですね。",
+      "explanation": "漢字の読み間違いを修正している場面で、「混雑ではないですね」の部分は自然です。"
+    },
+    {
+      "original_sentence": "君が混乱を起こしてくれれば、私たちはそのまま彼らの基地を通り過ぎられる。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "君が混乱を起こしてくれれば、私たちはそのまま彼らの基地を通り過ぎられる。",
+      "native_speaker_version": "君が混乱を起こしてくれれば、俺たちはそのまま敵の基地を通り抜けられる。",
+      "explanation": "ゲーム内のセリフとして自然な文語調です。"
+    },
+    {
+      "original_sentence": "基地を通り過ぎられる、どういう意味ですか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "基地を通り過ぎられる、どういう意味ですか？",
+      "native_speaker_version": "「基地を通り過ぎられる」ってどういう意味ですか？",
+      "explanation": "意味を尋ねる自然な質問です。"
+    },
+    {
+      "original_sentence": "通り過ぎられる。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "通り過ぎられる。",
+      "native_speaker_version": "通り過ぎられる、か。",
+      "explanation": "反芻として自然です。"
+    },
+    {
+      "original_sentence": "はい、終わったらゴーズですか？ゴーズの日をして、これは合図です、どういう意味ですか？",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "はい、終わったら合図ですか？合図の火を灯して、これは合図です。どういう意味ですか？",
+      "native_speaker_version": "終わったら「合図の火を灯して」って書いてあるけど、この「合図」ってどういう意味ですか？",
+      "explanation": "「ゴーズ」は「合図」の誤読、「日をして」は「火を灯して」の誤読です。元の発話はかなり混乱していますが、質問の意図は理解できます。"
+    },
+    {
+      "original_sentence": "この漢字、見たことはありますが、動詞として使われている場合、その読み方がわからないです。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "この漢字、見たことはありますが、動詞として使われている場合、その読み方がわからないです。",
+      "native_speaker_version": "この漢字は見たことあるんですけど、動詞で使われてるとどう読むのかわからないです。",
+      "explanation": "漢字の読み方についての質問で自然です。"
+    },
+    {
+      "original_sentence": "火を燃やすではなくて、それは言わないです。火を燃やす。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「火を燃やす」ではなくて、それは言わないです。「火を燃やす」…",
+      "native_speaker_version": "「火を燃やす」じゃなくて、それはあまり言わないですね。「火を燃やす」じゃなくて…",
+      "explanation": "ことばを探している様子ですが、「火を燃やす」を繰り返していて不自然です。意図は伝わります。"
+    },
+    {
+      "original_sentence": "チャットで送ったらわかります。では、送ります。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "チャットで送ったらわかります。では、送ります。",
+      "native_speaker_version": "チャットに送ればわかりますね。送ります。",
+      "explanation": "自然な発言です。"
+    },
+    {
+      "original_sentence": "言わないですね、火を燃やす。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "言わないですね、「火を燃やす」は。",
+      "native_speaker_version": "「火を燃やす」って言わないですよね。",
+      "explanation": "確認の表現として自然です。"
+    },
+    {
+      "original_sentence": "でも、私が聞いているのはこの「明かり」です。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "でも、私が聞いているのはこの「明かり」です。",
+      "native_speaker_version": "でも、私が聞きたいのはこの「明かり」って言葉です。",
+      "explanation": "話題を整理していて自然です。"
+    },
+    {
+      "original_sentence": "明かりする。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「明かりする」？",
+      "native_speaker_version": "「明かりする」って言いますか？",
+      "explanation": "動詞の形を模索している断片で、単体では文として不完全です。"
+    },
+    {
+      "original_sentence": "でもスラジットさんに聞きたいです。火をつける、火を燃やす、火を…明かりして…でも今ググってみて、火を灯すと書いてあります。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "でもスラジットさんに聞きたいです。「火をつける」「火を燃やす」「火を…」「明かりして」…でも今ググってみたら、「火を灯す」と書いてあります。",
+      "native_speaker_version": "スラジットさんに聞きたいんですけど、「火をつける」「火を燃やす」、それと「明かりして」…でも今ちょっと検索したら「火を灯す」って出てきました。",
+      "explanation": "思考の過程をそのまま口にしており、断片的ですが会話としては許容範囲です。「明かりして」は動詞として不自然なので、後に「灯す」に修正しました。"
+    },
+    {
+      "original_sentence": "火を灯まして…あ、すみません、灯ますではなく火を灯す。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「火を灯まして」…あ、すみません、「灯ます」ではなく「火を灯す」ですね。",
+      "native_speaker_version": "「火を灯まして」…あ、すみません、「灯す」ですね。「火を灯す」。",
+      "explanation": "活用の間違いに自分で気づいて修正している場面です。過程としては自然ですが、文法的に誤った形を一度発しています。"
+    },
+    {
+      "original_sentence": "調べてみましょう。「火を灯す」「火をつける」「火を燃やす」の違いは何ですか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "調べてみましょう。「火を灯す」「火をつける」「火を燃やす」の違いは何ですか？",
+      "native_speaker_version": "ちょっと調べてみましょう。「火を灯す」「火をつける」「火を燃やす」の違いって何ですかね？",
+      "explanation": "一緒に調べようという提案で自然です。"
+    },
+    {
+      "original_sentence": "では画面を共有してもいいですか？私の。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "では画面を共有してもいいですか？私の画面を。",
+      "native_speaker_version": "画面を共有してもいいですか？私の画面を。",
+      "explanation": "「私の」で文が切れていますが、すぐに補えば自然です。"
+    },
+    {
+      "original_sentence": "で、これを一緒に読んでみましょう。今聞いてみましたが、火を灯す、火をつける、火を燃やすの違いを深く説明してください。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "で、これを一緒に読んでみましょう。今聞いてみましたが、「火を灯す」「火をつける」「火を燃やす」の違いを深く説明してください。",
+      "native_speaker_version": "じゃあ一緒に読んでみましょう。今質問したんですが、「火を灯す」「火をつける」「火を燃やす」の違いを詳しく説明してください。",
+      "explanation": "AIへの質問文を読み上げており、自然な依頼表現です。"
+    },
+    {
+      "original_sentence": "では、いずれも火に関する表現ですが、その目的、ニュアンス、対象となる対象物が異なります。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "では、いずれも火に関する表現ですが、その目的、ニュアンス、対象となる対象物が異なります。",
+      "native_speaker_version": "いずれも火に関する表現ですが、目的やニュアンス、対象物が異なります。",
+      "explanation": "検索結果を読み上げており、少し硬い表現ですが文法的には正しいです。「対象となる対象物」は重複表現で不自然です。"
+    },
+    {
+      "original_sentence": "結論から言うと、以下のような使い分けが、心臓ですかね。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "結論から言うと、以下のような使い分けが、深層ですかね。",
+      "native_speaker_version": "結論から言うと、以下のような使い分けが…あれ、深層？",
+      "explanation": "「心臓」は「深層」などの読み間違いと思われます。読み上げ中の混乱ですが、意味をなしていません。"
+    },
+    {
+      "original_sentence": "ディーバー",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "ディープ？",
+      "native_speaker_version": "ディープ？",
+      "explanation": "英単語 deep の読み間違いと思われます。単語だけなので評価が難しいですが、不自然です。"
+    },
+    {
+      "original_sentence": "火を灯すは明らか…明らかい…明らかり…明らかりや…おんもりをもきとし",
+      "grade": "incorrect",
+      "slightly_corrected_sentence": "「火を灯す」は明かり…明かりや…「明かりや趣を目的とし」？",
+      "native_speaker_version": "「火を灯す」は「明かりや趣を目的とし」と書いてあります。",
+      "explanation": "「明かりや趣を目的とし」をうまく読み取れず、断片的な発音になっています。結果として意味不明な音の連続になっているため、不自然です。"
+    },
+    {
+      "original_sentence": "灯す、火を灯す。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "「灯す」、「火を灯す」。",
+      "native_speaker_version": "「灯す」、「火を灯す」ですね。",
+      "explanation": "正しい読みを確認している自然な発言です。"
+    },
+    {
+      "original_sentence": "あー、でもここ、この火、多分ここから始めた方がいいかもしれないです。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あー、でもここ、この「火」、多分ここから始めた方がいいかもしれないです。",
+      "native_speaker_version": "あ、でもこの「火」の説明、たぶんここから読み始めたほうがいいかもしれないです。",
+      "explanation": "文章の読み始めを提案しており自然です。"
+    },
+    {
+      "original_sentence": "火を燃やすは、その火が続く状態を維持する。あー、火を燃やすは、もう火がありますが、その続く状態を維持すること。例えば、ある日に、木が丸太を入れる、のこと、火を燃やして。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「火を燃やす」は、その火が続く状態を維持すること。あー、「火を燃やす」は、もう火があって、その状態を維持すること。例えば、ある日に、丸太を入れて火を燃やす、みたいな。",
+      "native_speaker_version": "「火を燃やす」は、火が消えないように維持することで、たとえば丸太をくべて火を燃やし続けることです。",
+      "explanation": "「木が丸太を入れる」は語順が不自然で、「丸太を火に入れる」などが適切です。全体にたどたどしいですが、意味は伝わります。"
+    },
+    {
+      "original_sentence": "飛ばすは、それはジッドさんが言った通り、新しい火を作ること。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「火をつける」は、それはジッドさんが言った通り、新しい火を作ること。",
+      "native_speaker_version": "「火をつける」は、さっきジッドさんが言った通り、新しく火を起こすことですね。",
+      "explanation": "「飛ばす」は「火をつける」の言い間違いと思われます。そのため意味が通じません。"
+    },
+    {
+      "original_sentence": "火をつける。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "火をつける。",
+      "native_speaker_version": "火をつける、ですね。",
+      "explanation": "正しい単語の確認で自然です。"
+    },
+    {
+      "original_sentence": "無機的で機能的。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「無機的で機能的」？",
+      "native_speaker_version": "「無機的で機能的」って書いてありますけど。",
+      "explanation": "画面のテキストを読み上げていますが、文として不完全です。"
+    },
+    {
+      "original_sentence": "これで、まあこれを読んでもまだわからないです。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "これで、まあこれを読んでもまだわからないです。",
+      "native_speaker_version": "でも、これを読んでもまだよくわからないですね。",
+      "explanation": "理解が不十分なことを伝える自然な表現です。"
+    },
+    {
+      "original_sentence": "だいたい似てると思います。火をつけると火を灯すは似てますが、ここ、ロウソク、キャンドル、ここにキャンドルを灯すと書いてあります。ここに希望の火を灯す。で、ここに火をつけるの方は今度ライター、タバコ、ガソリン、火をつける。だいたい似てますね。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "だいたい似てると思います。「火をつける」と「火を灯す」は似てますが、ここにロウソク、キャンドルを灯すと書いてあります。「希望の火を灯す」。で、「火をつける」の方はライター、タバコ、ガソリンに火をつける。だいたい似てますね。",
+      "native_speaker_version": "だいたい似てますね。「火をつける」と「火を灯す」は似てるけど、「ロウソクに火を灯す」って書いてあって、そのあとに「希望の火を灯す」。で、「火をつける」の方は「ライターでタバコに火をつける」とか「ガソリンに火をつける」。ほぼ同じ感じですね。",
+      "explanation": "全体に単語の羅列で文が完結していませんが、口語の比較説明としては成立しています。「今度」の使い方がやや不自然です。"
+    },
+    {
+      "original_sentence": "わかりました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "わかりました。",
+      "native_speaker_version": "わかりました。",
+      "explanation": "理解を示す自然なあいづちです。"
+    },
+    {
+      "original_sentence": "ではもう一度読んでみますね。このゲームの文章、なんて書いてありますか。「計画：君が今、混乱を起こしてくれれば、私たちはそのまま彼らの基地を通り過ぎられる。終わったら合図、合図の火を灯して、灯して」",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ではもう一度読んでみますね。このゲームの文章、なんて書いてありますか。「計画：君が今、混乱を起こしてくれれば、私たちはそのまま彼らの基地を通り過ぎられる。終わったら合図、合図の火を灯して」",
+      "native_speaker_version": "もう一度読んでみますね。このゲームの文章です。「計画：君が今、混乱を起こしてくれれば、我々はそのまま彼らの基地を通り過ぎられる。終わったら合図の火を灯して」",
+      "explanation": "ゲーム内テキストの読み上げで、正確に読んでいます。"
+    },
+    {
+      "original_sentence": "何々橋で合流してくれ。その言葉はザンバシ。ザンではないですね。わからないです、その言葉の読み方。これはサンバシなんですけど。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "何々橋で合流してくれ。その言葉は「ザンバシ」？「ザン」じゃないですね。読み方がわからないです。これは「サンバシ」なんですけど。",
+      "native_speaker_version": "「何々橋で合流してくれ」って書いてあって、この漢字、「桟橋」？「ザン」じゃなくて「サン」？読み方がわからないです。「サンバシ」って読むんですかね。",
+      "explanation": "「ザンバシ」と読んでしまい、正しい読みを模索しています。漢字の誤読を含みますが、会話の流れとしては自然です。"
+    },
+    {
+      "original_sentence": "サンバシ、はい。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "桟橋、はい。",
+      "native_speaker_version": "桟橋、はい。",
+      "explanation": "正しい単語を確認しており、自然です。"
+    },
+    {
+      "original_sentence": "はいそうですね。わかりました。peer。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "はい、そうですね。わかりました。pier。",
+      "native_speaker_version": "はい、わかりました。pierですね。",
+      "explanation": "英単語の確認を含みますが、問題ありません。"
+    },
+    {
+      "original_sentence": "ザンバシで合流してくれ。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「桟橋で合流してくれ」。",
+      "native_speaker_version": "「桟橋で合流してくれ」ってことですね。",
+      "explanation": "直前で正しい読みを確認したにもかかわらず再度「ザンバシ」と言っていますが、単純な言い間違いです。"
+    },
+    {
+      "original_sentence": "受諾します。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "受諾します。",
+      "native_speaker_version": "承諾します。",
+      "explanation": "ゲーム内の選択肢の読み上げで、「受諾」は固いですが正しいです。会話では「承諾」のほうが自然です。"
+    },
+    {
+      "original_sentence": "で、ここにさんたくさん、今クエストのボードのことを読んでいます。山… はい、ありがとう。山岳にある異端者の何々を見つける。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "で、ここに桟橋、今クエストのボードのことを読んでいます。山… はい、ありがとう。「山岳にある異端者の何々を見つける」。",
+      "native_speaker_version": "で、ここに桟橋と書いてあります。今クエストのボードを読んでいて、山… あ、ありがとう。「山岳にある異端者の砦を見つける」ですね。",
+      "explanation": "「さんたくさん」は「桟橋」を読み違えた可能性があります。相手の助けを経てクエスト文を読んでいます。"
+    },
+    {
+      "original_sentence": "石の上に比べるが書いてあります。",
+      "grade": "incorrect",
+      "slightly_corrected_sentence": "石の上に「比べる」が書いてあります？",
+      "native_speaker_version": "石の上に「砦」って書いてありますね。",
+      "explanation": "「砦」を「比べる」と読み間違えており、文として意味が通じません。"
+    },
+    {
+      "original_sentence": "砦。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "砦。",
+      "native_speaker_version": "砦ですね。",
+      "explanation": "正しい読みを確認した単語で、自然です。"
+    },
+    {
+      "original_sentence": "山岳にある異端者の砦を見つける。では山岳に行きます。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "山岳にある異端者の砦を見つける。では山岳に行きます。",
+      "native_speaker_version": "「山岳にある異端者の砦を見つける」、じゃあ山岳に行きますね。",
+      "explanation": "クエストの目的を確認して行動に移す、自然な流れです。"
+    },
+    {
+      "original_sentence": "私のキャラクターの名前ですか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "私のキャラクターの名前ですか？",
+      "native_speaker_version": "私のキャラの名前ですか？",
+      "explanation": "相手の質問に対する確認で自然です。"
+    },
+    {
+      "original_sentence": "声、呼べるというよりも生み出す。生み出す、生じる？その新しい生き物を生み出す。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「声で呼べる」というよりも「生み出す」。生み出す、生じる？新しい生き物を生み出すってことですか。",
+      "native_speaker_version": "声で呼ぶっていうよりは、作り出すとか生み出すって意味ですか？新しい生き物を生み出す感じ？",
+      "explanation": "言葉の定義を探っている途中の断片的発言で、少し不自然ですが、会話のキャッチボールとしては自然です。"
+    },
+    {
+      "original_sentence": "どこにいますか？砦の左の左に。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "どこにいますか？砦の左の左に。",
+      "native_speaker_version": "どこにいますか？砦の左側です。",
+      "explanation": "「左の左」は意味が重複していますが、位置を示そうとしていることは伝わります。"
+    },
+    {
+      "original_sentence": "じゃあ何をすればいいですか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "じゃあ何をすればいいですか？",
+      "native_speaker_version": "じゃあ、何をすればいいですか？",
+      "explanation": "自然な指示の求め方です。"
+    },
+    {
+      "original_sentence": "異端者を殺して、やつらの気をそらす。あーそうですね、混乱を起こさないといけないからですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "異端者を殺して、やつらの気をそらす。あーそうですね、混乱を起こさないといけないからですね。",
+      "native_speaker_version": "異端者を倒して、やつらの注意をそらす。ああ、そうか、混乱させなきゃいけないからですね。",
+      "explanation": "目的を理解した発言で、自然です。"
+    },
+    {
+      "original_sentence": "その技術を選択しました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そのスキルを選択しました。",
+      "native_speaker_version": "そのスキルを選びました。",
+      "explanation": "「技術」より「スキル」のほうがゲームでは自然ですが、意味は通じます。"
+    },
+    {
+      "original_sentence": "例えば胴装備の能力、選択しましたか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "例えば胴装備の能力って選択しましたか？",
+      "native_speaker_version": "胴装備のスキルとか選びました？",
+      "explanation": "相手への質問として自然です。"
+    },
+    {
+      "original_sentence": "そうですね、私たちそんなに調べなかったからですね。でも、とりあえず、なんでもいいから。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですね、私たちそんなに調べなかったからですね。でも、とりあえず、なんでもいいから。",
+      "native_speaker_version": "そうですよね、あまり調べてなかったから。でもとりあえず何でもいいので。",
+      "explanation": "理由と妥協を述べており、自然です。"
+    },
+    {
+      "original_sentence": "で、ここのボックスマンという人を手伝ってくれる人。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "で、ここのボックスマンという手伝ってくれる人がいます。",
+      "native_speaker_version": "で、ここにボックスマンっていう助けてくれるNPCがいるんですね。",
+      "explanation": "文が途中で切れていますが、NPCの説明をしようとしていることはわかります。"
+    },
+    {
+      "original_sentence": "あ、ここに火をつけないといけないですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あ、ここに火をつけないといけないですね。",
+      "native_speaker_version": "あ、ここに火をつけないといけないんですね。",
+      "explanation": "気づきの発言で自然です。"
+    },
+    {
+      "original_sentence": "で、続きます。進みます。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "で、続けます。進みます。",
+      "native_speaker_version": "続けて進みますね。",
+      "explanation": "操作の実況として自然です。"
+    },
+    {
+      "original_sentence": "そうですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですね。",
+      "native_speaker_version": "そうですね。",
+      "explanation": "同意のあいづちです。"
+    },
+    {
+      "original_sentence": "多分パイロブラストという能力ですか。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "多分パイロブラストという能力ですか？",
+      "native_speaker_version": "たぶんパイロブラストっていうスキルですかね。",
+      "explanation": "推測を述べており自然です。"
+    },
+    {
+      "original_sentence": "はい、では三橋、もう通過する、ティアと合流し、島を離れる。これはチュートリアルの最後です。一緒に完了しましょう。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "はい、では桟橋を通過して、ティアと合流し、島を離れる。これはチュートリアルの最後です。一緒に完了しましょう。",
+      "native_speaker_version": "じゃあ桟橋を通って、ティアと合流して島を離れる。これでチュートリアル最後です。一緒にクリアしましょう。",
+      "explanation": "「三橋」は「桟橋」の誤読です。やや断片的ですが、ゲームの流れを説明できています。"
+    },
+    {
+      "original_sentence": "壊れてしまったみたいですね。どうして入れなくなったんですか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "壊れてしまったみたいですね。どうして入れなくなったんですか？",
+      "native_speaker_version": "なんか壊れちゃったみたいですね。どうして入れなくなったんでしょう？",
+      "explanation": "状況の観察と質問で自然です。"
+    },
+    {
+      "original_sentence": "まだその、スラジットさんの周りに異端者が残っていますかね？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "まだスラジットさんの周りに異端者が残っていますかね？",
+      "native_speaker_version": "まだスラジットさんの周りに異端者が残ってますか？",
+      "explanation": "確認の質問として自然です。"
+    },
+    {
+      "original_sentence": "その目標をまだ達成していませんでした。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "その目標をまだ達成していませんでした。",
+      "native_speaker_version": "その目標がまだ達成できてなかったです。",
+      "explanation": "状況報告として自然です。"
+    },
+    {
+      "original_sentence": "小さい右上にある地図を見たら大体どこに…",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "小さい右上にある地図を見たら大体どこにいるか…",
+      "native_speaker_version": "右上の小さな地図を見れば、だいたいどこにいるかわかりますよね。",
+      "explanation": "文が途中で切れていますが、提案の意図は明白です。"
+    },
+    {
+      "original_sentence": "見ましたよ。その異端者を倒しましたね、今。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "見ましたよ。その異端者を倒しましたね、今。",
+      "native_speaker_version": "見ましたよ。今、異端者を倒しましたね。",
+      "explanation": "実況として自然です。"
+    },
+    {
+      "original_sentence": "はい。行きましょう。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "はい。行きましょう。",
+      "native_speaker_version": "はい、行きましょう。",
+      "explanation": "自然な促しです。"
+    },
+    {
+      "original_sentence": "で、ティアと合流してしまおう。多分これはチュートリアルの最後かもしれないです。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "で、ティアと合流してしまおう。多分これがチュートリアルの最後かもしれないです。",
+      "native_speaker_version": "じゃあ、ティアと合流しちゃいましょう。たぶんこれでチュートリアル最後だと思います。",
+      "explanation": "カジュアルな提案で自然です。"
+    },
+    {
+      "original_sentence": "で、ティアキャプテンと話して、「そなたに一つ借りができたな、召喚。アルビオンへ向かおう」そうですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "で、キャプテン・ティアと話して、「そなたに一つ借りができたな、召喚。アルビオンへ向かおう」、そうですね。",
+      "native_speaker_version": "キャプテン・ティアと話したら、「そなたに一つ借りができたな、召喚。アルビオンへ向かおう」って言われました。",
+      "explanation": "セリフの引用と同意で、自然です。"
+    },
+    {
+      "original_sentence": "これはチュートリアルの船。開始に話しかける。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "これはチュートリアルの船だ。「開始」に話しかける。",
+      "native_speaker_version": "これがチュートリアルの船で、「開始」に話しかけるんだ。",
+      "explanation": "ゲーム画面の説明で、少々ぶっきらぼうですが自然です。"
+    },
+    {
+      "original_sentence": "開港時に話しかける。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「開港時」に話しかける。",
+      "native_speaker_version": "「開港時」ってところに話しかけるんですね。",
+      "explanation": "「開港時」が何を指すかわかりにくいですが、ゲーム内テキストの読み上げとしては問題ありません。"
+    },
+    {
+      "original_sentence": "どこを選びますか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "どこを選びますか？",
+      "native_speaker_version": "どこにしますか？",
+      "explanation": "自然な質問です。"
+    },
+    {
+      "original_sentence": "そうですね。森林と山岳も行ったことがあるので、スワンプ。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですね。森林と山岳も行ったことがあるので、スワンプ。",
+      "native_speaker_version": "そうですね、森林と山岳はもう行ったので、スワンプにしますか。",
+      "explanation": "理由と選択を示して自然です。"
+    },
+    {
+      "original_sentence": "なんていうか、日本語でなんと呼ばれていますか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "なんていうか、日本語でなんと呼ばれていますか？",
+      "native_speaker_version": "この場所、日本語でなんて言うんですか？",
+      "explanation": "語彙を尋ねる自然な質問です。"
+    },
+    {
+      "original_sentence": "はい？ぬまち？ぬまち？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "はい？ぬまち？",
+      "native_speaker_version": "え？ぬまち？",
+      "explanation": "聞き返しで自然です。"
+    },
+    {
+      "original_sentence": "ぬまちにしましょうか。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ぬまちにしましょうか。",
+      "native_speaker_version": "じゃあ沼地にしましょうか。",
+      "explanation": "提案として自然です。"
+    },
+    {
+      "original_sentence": "ぬまちにしました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ぬまちにしました。",
+      "native_speaker_version": "沼地に決定しました。",
+      "explanation": "選択の報告で自然です。"
+    },
+    {
+      "original_sentence": "映画かなんか今再生されています。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "映画かなんかが今再生されています。",
+      "native_speaker_version": "ムービーみたいなのが今流れてますね。",
+      "explanation": "状況説明で自然です。"
+    },
+    {
+      "original_sentence": "そんな電鉄が本当に、俺が確かに知っているのは、この土地の資源、手に入れるのも早くて、本当に全部、このだからいっつも連れてきたんじゃないか。行け。",
+      "grade": "incorrect",
+      "slightly_corrected_sentence": "そんな伝説が…俺が確かに知っているのは、この土地の資源は手に入れるのも早くて、本当に全部…だからいつも連れてきたんじゃないか？行け。",
+      "native_speaker_version": "（ゲーム内音声を正確に聞き取れていないため、意味不明瞭）",
+      "explanation": "ゲーム中のセリフを聞き取ろうとしていますが、「電鉄」は「伝説」などの聞き間違いで、断片的すぎてほぼ意味をなしていません。"
+    },
+    {
+      "original_sentence": "宝かじや資源よりもはるかに価値のあるものが見つかる。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "宝飾や資源よりもはるかに価値のあるものが見つかる。",
+      "native_speaker_version": "宝飾品や資源よりもずっと価値のあるものが見つかる。",
+      "explanation": "「宝かじ」は「宝飾」の読み間違いと思われますが、文としては成立しています。"
+    },
+    {
+      "original_sentence": "それに練習や高い技術時間がかかれば自分の名を書かせることができる。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "それに練習や高い技術、時間がかかれば自分の名を轟かせることができる。",
+      "native_speaker_version": "鍛錬と高度な技術、そして時間をかければ自分の名を轟かせることができる。",
+      "explanation": "「書かせる」ではなく「轟かせる」が正しいと思われます。文法的には通じていますが、元の意味とは異なる可能性が高いです。"
+    },
+    {
+      "original_sentence": "リクだ。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "リクだ。",
+      "native_speaker_version": "リクだ。",
+      "explanation": "固有名詞の確認で自然です。"
+    },
+    {
+      "original_sentence": "到着したらお前はどうする？このリクの一番強い戦士になる。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "到着したらお前はどうする？このリクの一番強い戦士になる。",
+      "native_speaker_version": "着いたらお前はどうする？このリクで最強の戦士になるんだ。",
+      "explanation": "ゲーム内セリフの読み上げで、文法的に問題ありません。"
+    },
+    {
+      "original_sentence": "報酬があります。今すぐ確認しますか？はい、確認します。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "報酬があります。今すぐ確認しますか？はい、確認します。",
+      "native_speaker_version": "報酬があります。今すぐ確認しますか？はい。",
+      "explanation": "ゲームのダイアログへの応答で自然です。"
+    },
+    {
+      "original_sentence": "アルビオンオンライン冒険者様アカウント登録ありがとうございます。報酬として、このメッセージに…アルビオンオンラインを始めるにはなった必要なトレード…ああ、負荷の何々の賞をいつか…何々ツイートしました、はしている装備に…必ず装備を着用してからご利用ください。アルビオンの世界へようこそ。アルビオンオンラインチームより。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "「アルビオンオンライン冒険者様、アカウント登録ありがとうございます。報酬として、このメッセージに…アルビオンオンラインを始めるには…」ああ、なんだろう…「必ず装備を着用してからご利用ください。アルビオンの世界へようこそ。アルビオンオンラインチームより」",
+      "native_speaker_version": "ゲームからのメッセージを読み上げていますが、ところどころ読み間違えたり詰まったりしています。自然な読み上げとは言えません。",
+      "explanation": "長文のメッセージを読み上げながら、読みにくい部分でつまずいています。文法的誤りよりも、流暢さに欠ける点が不自然です。"
+    },
+    {
+      "original_sentence": "今私たち同じ…",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "今、私たち同じサーバーですね。",
+      "native_speaker_version": "今、私たち同じサーバーにいますね。",
+      "explanation": "文が途中で切れていますが、補えば自然です。"
+    },
+    {
+      "original_sentence": "メッセージが出てきましたね、自分の道を選ぶ。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "メッセージが出てきましたね。「自分の道を選ぶ」。",
+      "native_speaker_version": "「自分の道を選ぶ」ってメッセージが出ましたね。",
+      "explanation": "自然な気づきの発言です。"
+    },
+    {
+      "original_sentence": "でもここに書いてある…そうですね、いつでもルートを変えることができますと書いてあるから、なんでもいいですよね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "でもここに書いてありますね。いつでもルートを変えることができますって書いてあるから、なんでもいいですよね。",
+      "native_speaker_version": "でも「いつでもルートを変えられます」って書いてあるから、どれでも大丈夫ですよね。",
+      "explanation": "ゲーム内の説明を読んでの判断で自然です。"
+    },
+    {
+      "original_sentence": "はい、確定。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "はい、確定。",
+      "native_speaker_version": "はい、決定します。",
+      "explanation": "操作の実況で自然です。"
+    },
+    {
+      "original_sentence": "で、ここに最初の一歩、そうですよね、最初の一歩、カテゴリー報酬、各カテゴリーのミッションを一定数クリアすると…",
+      "grade": "correct",
+      "slightly_corrected_sentence": "で、ここに「最初の一歩」、そうですよね、「最初の一歩」、カテゴリー報酬、各カテゴリーのミッションを一定数クリアすると…",
+      "native_speaker_version": "で、「最初の一歩」というカテゴリー報酬があって、各カテゴリーのミッションを一定数クリアすると…",
+      "explanation": "読み上げながらの説明で、少し冗長ですが自然です。"
+    },
+    {
+      "original_sentence": "そうですね。そうですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですね。そうですね。",
+      "native_speaker_version": "本当にそうですね。",
+      "explanation": "重ねて同意しており自然です。"
+    },
+    {
+      "original_sentence": "今どこを見ていますか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "今どこを見ていますか？",
+      "native_speaker_version": "今どこ見てますか？",
+      "explanation": "自然な質問です。"
+    },
+    {
+      "original_sentence": "クエストと同じアイコン。アルビオン小石？小箱のこと？",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "クエストと同じアイコン、アルビオン小石？小箱のことですか？",
+      "native_speaker_version": "クエストと同じアイコンですね。アルビオンの小箱ってやつですか？",
+      "explanation": "「アルビオン小石」と言っていますが、おそらく「小箱」のことを指そうとしています。名称の混同でやや不自然です。"
+    },
+    {
+      "original_sentence": "すいません、どこを見ているかわからないです。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "すいません、どこを見ているかわからないです。",
+      "native_speaker_version": "すみません、今どこを見てるのかわからないです。",
+      "explanation": "丁寧な断りで自然です。"
+    },
+    {
+      "original_sentence": "あ、はい。大丈夫です。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あ、はい。大丈夫です。",
+      "native_speaker_version": "あ、はい、大丈夫です。",
+      "explanation": "自然な受け答えです。"
+    },
+    {
+      "original_sentence": "ではとりあえず、もうあと2分なので、とりあえずここでストップしましょうか。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ではとりあえず、もうあと2分なので、ここでストップしましょうか。",
+      "native_speaker_version": "じゃあとりあえず、もう残り2分くらいなんで、ここでいったん止めましょうか。",
+      "explanation": "時間を理由にした提案で自然です。"
+    },
+    {
+      "original_sentence": "チュートリアルをついに完了しましたね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "チュートリアルをついに完了しましたね。",
+      "native_speaker_version": "ついにチュートリアルが終わりましたね。",
+      "explanation": "達成感を表す自然な表現です。"
+    },
+    {
+      "original_sentence": "あと2週間以上かかりましたね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あと2週間以上かかりましたね。",
+      "native_speaker_version": "結局2週間以上かかっちゃいましたね。",
+      "explanation": "期間を振り返って自然です。"
+    },
+    {
+      "original_sentence": "スラジットさんも多分このゲーム2時間以上プレイしてますね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "スラジットさんも多分このゲームを2時間以上プレイしてますね。",
+      "native_speaker_version": "スラジットさんもたぶんこのゲームもう2時間以上やってますよね。",
+      "explanation": "相手のプレイ時間の推測で自然です。"
+    },
+    {
+      "original_sentence": "どう思いますか？このゲームで続けましょうか？ファイナルファンタジー14を一度試してみましょうか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "どう思いますか？このゲームを続けましょうか？それともファイナルファンタジー14を一度試してみましょうか？",
+      "native_speaker_version": "どう思います？このゲーム続けますか？それとも一回FF14やってみます？",
+      "explanation": "選択を相手に委ねる自然な質問です。"
+    },
+    {
+      "original_sentence": "もうたくさん新しい言葉を学んだんですよね、せっかく…",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "もうたくさん新しい言葉を学んだんですよね。せっかくだから…",
+      "native_speaker_version": "せっかくたくさん新しい単語を覚えたし、このまま続けましょうか。",
+      "explanation": "「学びたんです」は「学んだんです」の言い間違いと思われます。理由を述べる文の途中で切れていますが、意図はわかります。"
+    },
+    {
+      "original_sentence": "じゃあ、あなたの、スラジットさんのキャラクターをクリックすると、フレンド追加できるようになりました。だからフレンドを追加。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "じゃあ、スラジットさんのキャラクターをクリックすると、フレンド追加できるようになりました。だからフレンドを追加しますね。",
+      "native_speaker_version": "じゃあ、スラジットさんのキャラをクリックしたらフレンド追加できるようになったので、追加しますね。",
+      "explanation": "操作説明で自然です。"
+    },
+    {
+      "original_sentence": "ウルフィにフレンド招待状を送信しました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ウルフィにフレンド招待状を送信しました。",
+      "native_speaker_version": "ウルフィにフレンド申請を送りました。",
+      "explanation": "ゲーム内の行動報告で自然です。"
+    },
+    {
+      "original_sentence": "ツイチかなんかがまだついてないですか？ツイチが来ませんでしたか？フレンド追加ツイチ。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "通知かなんかがまだついてないですか？通知が来ませんでしたか？フレンド追加の通知。",
+      "native_speaker_version": "なんか通知がまだ来てないですか？フレンド追加の通知って来ました？",
+      "explanation": "「ツイチ」は「通知」の言い間違いです。単語を誤っているため不自然ですが、文脈から意味は通じます。"
+    },
+    {
+      "original_sentence": "取引できますね。一度取引してみましょうか。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "取引できますね。一度取引してみましょうか。",
+      "native_speaker_version": "トレードできますね。ちょっとやってみましょうか。",
+      "explanation": "自然な提案です。"
+    },
+    {
+      "original_sentence": "じゃあ、キャラクターをクリックして、取引。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "じゃあ、キャラクターをクリックして、取引。",
+      "native_speaker_version": "じゃあキャラをクリックして、トレード。",
+      "explanation": "操作の実況です。"
+    },
+    {
+      "original_sentence": "で、ここに、まあ、ツルハシをここに。で、スラジットさん、同じツルハシを持っていますね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "で、ここにツルハシを置いて。スラジットさんも同じツルハシを持っていますね。",
+      "native_speaker_version": "ここにツルハシを置いてと。スラジットさんも同じの持ってますね。",
+      "explanation": "実況と確認で自然です。"
+    },
+    {
+      "original_sentence": "はい、はい。で、ここに受諾、クリックして。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "はい、はい。で、ここで受諾をクリックして。",
+      "native_speaker_version": "はい、これで承諾をクリックして。",
+      "explanation": "操作の説明で自然です。"
+    },
+    {
+      "original_sentence": "一度違うものを取引してみましょうか。私、このマルタをいっぱい持っているんだから、一応。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "一度違うものを取引してみましょうか。私、マルタをいっぱい持っているので、一応。",
+      "native_speaker_version": "別のものもトレードしてみましょうか。私、マルタをたくさん持ってるんで、とりあえず。",
+      "explanation": "理由を添えた提案で自然です。"
+    },
+    {
+      "original_sentence": "あー、はい、で、これ。でも多分、ここでいいかな。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あー、はい、これです。でも多分、ここでいいかな。",
+      "native_speaker_version": "あ、はい、これ。でもこれでいいかな。",
+      "explanation": "独り言のような確認で自然です。"
+    },
+    {
+      "original_sentence": "あー、でも、どうやって、この例えば今、硬い皮を31個ありますね。どうやってこの数を…",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "あー、でも、どうやってこの数を…今、硬い皮が31個あるんですけど、どうやって減らすんですか？",
+      "native_speaker_version": "でも、どうやって数を減らすんだろう。今、硬い皮が31個あるんですけど、これを分割するには？",
+      "explanation": "文が途中で切れていますが、数量の操作方法を尋ねたいのだとわかります。"
+    },
+    {
+      "original_sentence": "あーわかりました。ありがとうございます。はい。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あーわかりました。ありがとうございます。",
+      "native_speaker_version": "ああ、わかりました。ありがとうございます。",
+      "explanation": "理解と感謝で自然です。"
+    },
+    {
+      "original_sentence": "で、位置、とりあえずここに置いておいて、これで大丈夫ですかね。はい、大丈夫ですか？受託します。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "で、位置はとりあえずここに置いておいて、これで大丈夫ですかね。はい、大丈夫ですか？受託します。",
+      "native_speaker_version": "で、一旦ここに置いておきますね。これで大丈夫ですか？はい、承諾します。",
+      "explanation": "確認と了承で自然です。"
+    },
+    {
+      "original_sentence": "マルタ、マルタたくさん持ってます。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "マルタ、たくさん持ってます。",
+      "native_speaker_version": "マルタ、いっぱい持ってますね。",
+      "explanation": "所持品の確認で自然です。"
+    },
+    {
+      "original_sentence": "そうですね。これは何ですかね？調査。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですね。これは何ですかね？「調査」？",
+      "native_speaker_version": "そうですね。これ何ですか？「調査」ってやつ？",
+      "explanation": "メニュー項目への疑問で自然です。"
+    },
+    {
+      "original_sentence": "キャラクターを、スラジットさんのキャラクターをクリックすると、調査をクリックすると、そのキャラクターの装備している、装備？見れるように見れます。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "スラジットさんのキャラクターをクリックして、調査をクリックすると、そのキャラクターの装備している装備が見られるようになります。",
+      "native_speaker_version": "スラジットさんのキャラをクリックして「調査」を選ぶと、装備が見れるようになるんですね。",
+      "explanation": "「見れるように見れます」は二重表現で不自然です。「見られるようになります」が正しいです。"
+    },
+    {
+      "original_sentence": "こんばんは、こんばんはと送信しました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "「こんばんは」と送信しました。",
+      "native_speaker_version": "「こんばんは」って送りました。",
+      "explanation": "メッセージ送信の報告で自然です。"
+    },
+    {
+      "original_sentence": "とりあえずこのゲームで続けましょうかね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "とりあえずこのゲームを続けましょうかね。",
+      "native_speaker_version": "とりあえずこのゲームで続けましょうか。",
+      "explanation": "自然な提案です。"
+    },
+    {
+      "original_sentence": "ではパーティー、同じパーティー、パーティー作りましょうか。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "では、同じパーティーを作りましょうか。",
+      "native_speaker_version": "じゃあパーティーを組みましょうか。",
+      "explanation": "言い直していますが、まとまった提案になっています。"
+    },
+    {
+      "original_sentence": "今あなたのパーティーに参加するようウォルフィを招待しました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "今、あなたのパーティーに参加するよう、ウォルフィを招待しました。",
+      "native_speaker_version": "あなたのパーティーにウォルフィを招待しました。",
+      "explanation": "ゲーム内の行動報告で自然です。"
+    },
+    {
+      "original_sentence": "そうですね、私たち一緒にプレイしているので、同じパーティーに参加しましょうかね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですね、一緒にプレイしているので、同じパーティーに入りましょうか。",
+      "native_speaker_version": "そうですよね、せっかく一緒にやってるんで、同じパーティーに入りましょう。",
+      "explanation": "理由に基づく提案で自然です。"
+    },
+    {
+      "original_sentence": "あ、マークできるんですよ。私たちパーティー、一緒に同じパーティーに入っているから、キャラクターをクリックすると、このマークするという選択肢が出てきて、それをクリックすると…",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あ、マークできるんですよ。同じパーティーに入っているから、キャラクターをクリックすると「マークする」という選択肢が出てきて、それをクリックすると…",
+      "native_speaker_version": "あ、マークできるんですね。同じパーティーだから、キャラをクリックしたら「マークする」って出るので、それを押すと…",
+      "explanation": "機能の説明で、やや冗長ですが自然です。"
+    },
+    {
+      "original_sentence": "で、私たちも、その、チュートリアルを完了したから、次何をすればいいかわからないですよね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "で、私たちもチュートリアルを完了したから、次に何をすればいいかわからないですよね。",
+      "native_speaker_version": "で、僕たちもチュートリアルが終わったから、次に何していいかわからないですよね。",
+      "explanation": "状況の共有で自然です。"
+    },
+    {
+      "original_sentence": "パーティーリーダーを、えー、今パーティーリーダーを立てられました。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "パーティーリーダーが、えー、今パーティーリーダーが任命されました。",
+      "native_speaker_version": "パーティーリーダーが今、決まりましたね。",
+      "explanation": "「立てられました」は「任命された」の意味で通じますが、少し不自然です。「決まった」などが口語的です。"
+    },
+    {
+      "original_sentence": "はい。でも、変えますか？一度、変えてみましょうか。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "はい。でも、変えますか？一度、変えてみましょうか。",
+      "native_speaker_version": "はい。でも、変えます？ちょっと変えてみましょうか。",
+      "explanation": "リーダー交代の提案で自然です。"
+    },
+    {
+      "original_sentence": "パーティーから削除されました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "パーティーから削除されました。",
+      "native_speaker_version": "パーティーから抜けちゃいました。",
+      "explanation": "ゲーム内通知の読み上げで、そのまま自然です。"
+    },
+    {
+      "original_sentence": "大丈夫です。新しいパーティーを。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "大丈夫です。新しいパーティーを作りましょう。",
+      "native_speaker_version": "大丈夫です。新しくパーティー組みましょう。",
+      "explanation": "文が切れていますが、意図は明白です。"
+    },
+    {
+      "original_sentence": "ウルフがあなたをパーティーに招待しました。受託しますか？はい、受託します。パーティーに参加しました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ウルフがあなたをパーティーに招待しました。受諾しますか？はい、受諾します。パーティーに参加しました。",
+      "native_speaker_version": "ウルフがパーティーに招待してきました。承諾しますか？はい、参加します。",
+      "explanation": "UIの読み上げと応答で、「受託」は「受諾」の誤りかもしれませんが、意味は通じます。"
+    },
+    {
+      "original_sentence": "で、パーティーリーダーを立てて、プレスの隙をクリックすると、で、またパーティーから削除されましたと。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "で、パーティーリーダーを立てて、「プレス」の隙をクリックすると、またパーティーから削除されました。",
+      "native_speaker_version": "で、パーティーリーダーにして、なんかのボタンを押したら、またパーティーから外れちゃいました。",
+      "explanation": "「プレスの隙」は意味不明ですが、UIのボタンを指していると思われます。全体に状況説明がたどたどしいです。"
+    },
+    {
+      "original_sentence": "パーティーに参加しました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "パーティーに参加しました。",
+      "native_speaker_version": "パーティーに入りました。",
+      "explanation": "報告として自然です。"
+    },
+    {
+      "original_sentence": "あなたは現在パーティーリーダーです。でもリーダー、何ができるか、そのリーダーしか使えない機能はなんでしょうね。わからないです。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あなたは現在パーティーリーダーです。でもリーダーって何ができるのか、リーダーしか使えない機能は何でしょうね。わからないです。",
+      "native_speaker_version": "今あなたがパーティーリーダーです。でもリーダーしか使えない機能って何なんでしょうね。よくわからないです。",
+      "explanation": "疑問を口にしており自然です。"
+    },
+    {
+      "original_sentence": "あー、そうですよね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あー、そうですよね。",
+      "native_speaker_version": "ああ、そうですよね。",
+      "explanation": "共感のあいづちです。"
+    },
+    {
+      "original_sentence": "ここにまた、私たちが勉強した精錬所が置いてありますね。精錬所、ここで採掘します。銅の延べ棒を加工します。10個だけでいいですかね。10個加工しました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ここにまた、私たちが勉強した精錬所がありますね。ここで採掘して、銅の延べ棒を加工します。10個だけでいいですかね。10個加工しました。",
+      "native_speaker_version": "ここに前に話題に出た精錬所がありますね。ここで採掘して、銅の延べ棒を作るんです。10個だけでいいかな。10個加工しました。",
+      "explanation": "一連の操作説明で自然です。"
+    },
+    {
+      "original_sentence": "多分もう時間になってしまったので、次、明日レッスンが入っていますね。明日またゲームワールドに入って、私たち、自分で新しい目的を作らないといけないですよね。もうチュートリアル完了したから。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "多分もう時間になってしまったので、明日はレッスンがありますね。明日またゲームワールドに入って、自分たちで新しい目標を立てないといけないですよね。もうチュートリアルが終わったから。",
+      "native_speaker_version": "おそらく時間なので、明日はレッスンがありますし。明日またゲームに入って、自分たちで新しい目標を作らないといけませんね。チュートリアルは終わったので。",
+      "explanation": "今後の予定と課題を述べており、自然です。"
+    },
+    {
+      "original_sentence": "そうですね。その新しい目的作らないといけないですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "そうですね。新しい目的を作らないといけないですね。",
+      "native_speaker_version": "そうですね、新しい目標を立てないとですね。",
+      "explanation": "同意の繰り返しで自然です。"
+    },
+    {
+      "original_sentence": "このゲームはとても自由なゲームですから。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "このゲームはとても自由なゲームですから。",
+      "native_speaker_version": "このゲームはすごく自由ですからね。",
+      "explanation": "理由の提示で自然です。"
+    },
+    {
+      "original_sentence": "とりあえず、明日この、なんていうんですか、この地域の名前、ネムチ？沼地。沼地、はい。沼地。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "とりあえず、明日この地域の名前、なんていうんでしたっけ、ネムチ？沼地。沼地、はい。沼地。",
+      "native_speaker_version": "とりあえず明日はこの地域、なんて名前でしたっけ、沼地？沼地ですね。",
+      "explanation": "「ネムチ」は「沼地」の言い間違い。すぐに修正しているので、流れとしては自然です。"
+    },
+    {
+      "original_sentence": "とりあえず明日この沼地のところを冒険しましょうか。何があるか確認しましょうか。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "とりあえず明日はこの沼地を冒険しましょうか。何があるか確認しましょう。",
+      "native_speaker_version": "とりあえず明日はこの沼地を探索してみましょう。何があるか見てみましょう。",
+      "explanation": "提案として自然です。"
+    },
+    {
+      "original_sentence": "まあこの精錬所一つあるってもうわかりますよね。でも明日他の何があるか確認しましょう。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "まあ精錬所が一つあるのはもうわかりますよね。でも明日、他に何があるか確認しましょう。",
+      "native_speaker_version": "精錬所があるのはわかったので、明日は他に何があるか見てみましょう。",
+      "explanation": "既知の情報と今後の行動を述べて自然です。"
+    },
+    {
+      "original_sentence": "川なめし屋なんですか？川、川なめし屋、はい。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "川なめし屋ですか？川、川なめし屋、はい。",
+      "native_speaker_version": "川なめし屋？ああ、皮なめし屋ですね。",
+      "explanation": "聞き返しと確認で自然です。"
+    },
+    {
+      "original_sentence": "どこにありますか？",
+      "grade": "correct",
+      "slightly_corrected_sentence": "どこにありますか？",
+      "native_speaker_version": "どこですか？",
+      "explanation": "自然な質問です。"
+    },
+    {
+      "original_sentence": "あ、はいはいはい。あ、はいはい、見ました。この辺ですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "あ、はいはいはい。見ました。この辺ですね。",
+      "native_speaker_version": "あ、わかりました。このあたりですね。",
+      "explanation": "発見を知らせる自然な反応です。"
+    },
+    {
+      "original_sentence": "皮なめし、はい。ありますね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "皮なめし、はい。ありますね。",
+      "native_speaker_version": "あ、皮なめし屋がありますね。",
+      "explanation": "確認で自然です。"
+    },
+    {
+      "original_sentence": "で、この人何していますか？このピックオフという人。何かを、植物を採集しているみたいですね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "で、この人、何をしていますか？ピックオフという人。植物を採集しているみたいですね。",
+      "native_speaker_version": "で、このピックオフって人は何してるんですか？植物を採ってるみたいですね。",
+      "explanation": "NPCの行動についての質問と観察で自然です。"
+    },
+    {
+      "original_sentence": "年号ですね。あー、はい、はい。",
+      "grade": "slightly unnatural",
+      "slightly_corrected_sentence": "綿花ですね。あー、はい、はい。",
+      "native_speaker_version": "ああ、綿花ですね。はい。",
+      "explanation": "「年号」は「綿花」の聞き間違いです。相手の言葉を復唱していますが、単語を間違えています。"
+    },
+    {
+      "original_sentence": "ではとりあえずここでストップしましょう。ついに、チュートリアル完了しましたね。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ではとりあえずここでストップしましょう。ついにチュートリアルが完了しましたね。",
+      "native_speaker_version": "じゃあ一旦ここで終わりにしましょう。ついにチュートリアル終わりましたね。",
+      "explanation": "区切りの提案で自然です。"
+    },
+    {
+      "original_sentence": "はい、どうもありがとうございました。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "はい、どうもありがとうございました。",
+      "native_speaker_version": "はい、ありがとうございました。",
+      "explanation": "丁寧なお礼で自然です。"
+    },
+    {
+      "original_sentence": "ではまた明日。",
+      "grade": "correct",
+      "slightly_corrected_sentence": "ではまた明日。",
+      "native_speaker_version": "じゃあまた明日。",
+      "explanation": "自然な別れの挨拶です。"
+    }
+  ]
