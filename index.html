@@ -97,11 +97,43 @@ const fetchAudioUploadRequest = async (id) => apiRequest(`/api/audio/uploads/${i
 
 const selectUploadSpeakerRequest = async (id, speaker) => apiRequest(`/api/audio/uploads/${id}/speaker`, { speaker });
 
+const fetchStudySessionRequest = async (id) => apiRequest(`/api/audio/uploads/${id}/study`);
+
+const updateStudyProgressRequest = async (id, body) => apiRequest(`/api/audio/uploads/${id}/study/progress`, body);
+
 const SESSION_ACTIVE_STATUSES = new Set(['uploaded', 'processing']);
 const SESSION_SPEAKER_STATUSES = new Set(['speaker_selection', 'completed']);
+const SESSION_STUDY_PROCESSING_STATUSES = new Set(['speaker_selected', 'study_processing']);
+const SESSION_STUDY_READY_STATUSES = new Set(['study_ready']);
+const SESSION_STUDY_FAILED_STATUSES = new Set(['study_failed']);
 
 const isActiveUpload = (upload) => SESSION_ACTIVE_STATUSES.has(upload?.status);
 const needsSpeakerSelection = (upload) => SESSION_SPEAKER_STATUSES.has(upload?.status);
+const isStudyProcessing = (upload) => SESSION_STUDY_PROCESSING_STATUSES.has(upload?.status);
+const isStudyReady = (upload) => SESSION_STUDY_READY_STATUSES.has(upload?.status);
+const isStudyFailed = (upload) => SESSION_STUDY_FAILED_STATUSES.has(upload?.status);
+
+const TAG_FOR_GRADE = {
+  'incorrect': 'grammar',
+  'slightly unnatural': 'naturalness',
+  'correct': null,
+};
+
+const drillSentenceFromStudy = (s) => ({
+  id: `study-${s.id}`,
+  studyId: s.id,
+  position: s.position,
+  start: '',
+  dur: '',
+  correct: s.grade === 'correct',
+  tag: TAG_FOR_GRADE[s.grade] || (s.grade === 'correct' ? null : 'naturalness'),
+  original: s.originalSentence,
+  corrected_slight: s.slightlyCorrectedSentence || s.originalSentence,
+  corrected_native: s.nativeSpeakerVersion || s.originalSentence,
+  expl_jp: s.explanation || '',
+  expl_en: '',
+  _done: !!s.done,
+});
 
 const formatSessionDate = (value) => {
   if (!value) return 'Just now';
@@ -1003,18 +1035,28 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
 const SessionCard = ({ session, onResume }) => {
   const active = isActiveUpload(session);
   const selectingSpeaker = needsSpeakerSelection(session);
-  const selectedSpeaker = session.status === 'speaker_selected';
+  const studyProcessing = isStudyProcessing(session);
+  const studyReady = isStudyReady(session);
+  const studyFailed = isStudyFailed(session);
   const failed = session.status === 'error';
-  const clickable = selectingSpeaker;
+  const clickable = selectingSpeaker || studyReady || studyFailed;
+  const studyInfo = session.study || {};
+  const studyProgressPct = studyReady && studyInfo.sentenceCount
+    ? Math.round((studyInfo.completedCount / studyInfo.sentenceCount) * 100)
+    : 0;
   const status = failed
     ? { label:'Transcription failed', detail:session.error || 'Open the logs for Lemonfox details.', color:C.red, bg:C.redBg }
-    : active
-      ? { label:'Transcribing audio', detail:'Lemonfox is processing this recording.', color:C.blue, bg:C.blueBg }
-      : selectingSpeaker
-        ? { label:'Select speaker', detail:'Transcript is ready. Choose which speaker is you.', color:C.amber, bg:C.amberBg }
-        : selectedSpeaker
-          ? { label:'Speaker selected', detail:`${speakerLabel(session.selectedSpeaker)} selected. Waiting for the next processing step.`, color:C.green, bg:C.greenBg }
-        : { label:'Audio uploaded', detail:'Waiting to begin transcription.', color:C.amber, bg:C.amberBg };
+    : studyFailed
+      ? { label:'Analysis failed', detail:studyInfo.error || 'DeepSeek could not analyze this session.', color:C.red, bg:C.redBg }
+      : active
+        ? { label:'Transcribing audio', detail:'Lemonfox is processing this recording.', color:C.blue, bg:C.blueBg }
+        : selectingSpeaker
+          ? { label:'Select speaker', detail:'Transcript is ready. Choose which speaker is you.', color:C.amber, bg:C.amberBg }
+          : studyProcessing
+            ? { label:'Analyzing speech', detail:`Analyzing ${speakerLabel(session.selectedSpeaker)}'s sentences. This can take a minute.`, color:C.blue, bg:C.blueBg }
+          : studyReady
+            ? { label:'Ready to drill', detail:`${studyInfo.sentenceCount || 0} sentences ready · ${studyInfo.completedCount || 0} done`, color:C.green, bg:C.greenBg }
+          : { label:'Audio uploaded', detail:'Waiting to begin transcription.', color:C.amber, bg:C.amberBg };
 
   return (
     <div
@@ -1032,7 +1074,7 @@ const SessionCard = ({ session, onResume }) => {
       }}
       onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'; e.currentTarget.style.transform='none'; }}
     >
-      {active && (
+      {(active || studyProcessing) && (
         <div style={{
           position:'absolute', inset:'0 auto 0 0', width:'46%',
           background:`linear-gradient(90deg, transparent, ${C.blueBg}, transparent)`,
@@ -1051,9 +1093,9 @@ const SessionCard = ({ session, onResume }) => {
           background:status.bg, color:status.color,
           fontSize:11, fontWeight:600, whiteSpace:'nowrap',
         }}>
-        {active && <Spinner size={12} color={status.color} stroke={2}/>}
-          {(selectingSpeaker || selectedSpeaker) && <ChkI sz={12} col={status.color}/>}
-          {failed && <span style={{ fontFamily:"'DM Mono',monospace" }}>!</span>}
+        {(active || studyProcessing) && <Spinner size={12} color={status.color} stroke={2}/>}
+          {(selectingSpeaker || studyReady) && <ChkI sz={12} col={status.color}/>}
+          {(failed || studyFailed) && <span style={{ fontFamily:"'DM Mono',monospace" }}>!</span>}
           {status.label}
         </div>
       </div>
@@ -1061,8 +1103,8 @@ const SessionCard = ({ session, onResume }) => {
       <div style={{
         display:'flex', alignItems:'center', gap:12,
         padding:'12px 14px', borderRadius:10,
-        background: active ? C.bg2 : failed ? C.redBg : C.bg,
-        border:`1px solid ${failed ? `${C.red}22` : C.border}`,
+        background: (active || studyProcessing) ? C.bg2 : (failed || studyFailed) ? C.redBg : C.bg,
+        border:`1px solid ${(failed || studyFailed) ? `${C.red}22` : C.border}`,
         marginBottom:12,
       }}>
         <div style={{
@@ -1070,7 +1112,7 @@ const SessionCard = ({ session, onResume }) => {
           display:'flex', alignItems:'center', justifyContent:'center',
           background:status.bg, color:status.color, flexShrink:0,
         }}>
-          {active ? <Spinner size={16} color={status.color}/> : (selectingSpeaker || selectedSpeaker) ? <ChkI sz={17} col={status.color}/> : failed ? '!' : <UploadI sz={17} col={status.color}/>}
+          {(active || studyProcessing) ? <Spinner size={16} color={status.color}/> : (selectingSpeaker || studyReady) ? <ChkI sz={17} col={status.color}/> : (failed || studyFailed) ? '!' : <UploadI sz={17} col={status.color}/>}
         </div>
         <div style={{ minWidth:0, flex:1 }}>
           <div style={{ fontSize:13, color:C.ink, fontWeight:600, marginBottom:2 }}>{status.detail}</div>
@@ -1081,22 +1123,32 @@ const SessionCard = ({ session, onResume }) => {
         </div>
       </div>
 
-      {active ? (
+      {(active || studyProcessing) ? (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:4 }}>
           {[0,1,2].map(i => (
             <div key={i} style={{
-              height:4, borderRadius:2, background:i===0?C.blue:C.border2,
+              height:4, borderRadius:2, background:i===0?status.color:C.border2,
               opacity:i===0?1:0.6,
               animation:`pulse 1.2s ease ${i*0.18}s infinite`,
             }}/>
           ))}
         </div>
+      ) : studyReady ? (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          <div style={{ height:4, borderRadius:2, background:C.border2, overflow:'hidden' }}>
+            <div style={{ height:'100%', width:`${studyProgressPct}%`, background:C.green, transition:'width 0.3s' }}/>
+          </div>
+          <div style={{ display:'flex', gap:14, fontSize:12, flexWrap:'wrap', alignItems:'center' }}>
+            <span style={{ color:C.ink3 }}><b style={{ color:C.green, fontFamily:"'DM Mono',monospace" }}>{studyProgressPct}%</b></span>
+            <span style={{ color:C.ink3 }}>Click to {studyInfo.completedCount > 0 ? 'continue' : 'start'} drilling your sentences.</span>
+          </div>
+        </div>
       ) : (
         <div style={{ display:'flex', gap:14, fontSize:12, flexWrap:'wrap', alignItems:'center' }}>
-          <span style={{ color:C.ink3 }}><b style={{ color:status.color, fontFamily:"'DM Mono',monospace" }}>{selectingSpeaker ? 'speaker' : selectedSpeaker ? 'queued' : failed ? 'error' : session.status}</b></span>
+          <span style={{ color:C.ink3 }}><b style={{ color:status.color, fontFamily:"'DM Mono',monospace" }}>{selectingSpeaker ? 'speaker' : studyFailed ? 'error' : failed ? 'error' : session.status}</b></span>
           {selectingSpeaker && <span style={{ color:C.ink3 }}>Open this session and identify your voice.</span>}
-          {selectedSpeaker && <span style={{ color:C.ink3 }}>The next processing pass is not implemented yet.</span>}
-          {!selectingSpeaker && !selectedSpeaker && !failed && <span style={{ color:C.ink3 }}>No lesson data has been generated yet.</span>}
+          {studyFailed && <span style={{ color:C.red }}>{studyInfo.error || 'Re-select your speaker to retry.'}</span>}
+          {!selectingSpeaker && !studyFailed && !failed && <span style={{ color:C.ink3 }}>No lesson data has been generated yet.</span>}
           {failed && <span style={{ color:C.red }}>Transcription did not complete.</span>}
         </div>
       )}
@@ -1609,6 +1661,7 @@ const App = () => {
   const [sentences, setSentences] = useState(SENTENCES);
   const [cardIdx, setCardIdx]   = useState(0);
   const [direction, setDir]     = useState('up');
+  const [activeStudyUploadId, setActiveStudyUploadId] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -1636,8 +1689,26 @@ const App = () => {
     setSessions([]);
   };
 
-  const goTo   = (idx, dir) => { setDir(dir); setCardIdx(idx); };
-  const goNext = () => { if (cardIdx < sentences.length-1) goTo(cardIdx+1,'right'); else setScreen('summary'); };
+  const persistProgress = (body) => {
+    if (!activeStudyUploadId) return;
+    updateStudyProgressRequest(activeStudyUploadId, body).catch(() => {});
+  };
+
+  const goTo   = (idx, dir) => {
+    setDir(dir);
+    setCardIdx(idx);
+    persistProgress({ currentIndex: idx });
+  };
+  const markCurrentDone = () => {
+    const cur = sentences[cardIdx];
+    if (!cur || cur._done) return;
+    setSentences(prev => prev.map((s,i) => i === cardIdx ? { ...s, _done: true } : s));
+    if (cur.studyId) persistProgress({ sentenceUpdates: [{ id: cur.studyId, done: true }] });
+  };
+  const goNext = () => {
+    markCurrentDone();
+    if (cardIdx < sentences.length-1) goTo(cardIdx+1,'right'); else setScreen('summary');
+  };
   const goPrev = () => { if (cardIdx > 0) goTo(cardIdx-1,'left'); };
   const goJump = (idx) => goTo(idx, idx > cardIdx ? 'right' : 'left');
 
@@ -1670,7 +1741,7 @@ const App = () => {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user || !sessions.some(isActiveUpload)) return;
+    if (!user || !sessions.some(s => isActiveUpload(s) || isStudyProcessing(s))) return;
     const t = setInterval(() => {
       loadSessions({ quiet:true });
     }, 2500);
@@ -1706,8 +1777,34 @@ const App = () => {
     setScreen('speaker');
   };
   const handleResume  = async (session) => {
-    if (!session || !needsSpeakerSelection(session)) return;
+    if (!session) return;
     setUploadError('');
+
+    if (isStudyReady(session)) {
+      try {
+        const data = await fetchStudySessionRequest(session.id);
+        const study = data.study;
+        if (!study || !Array.isArray(study.sentences) || !study.sentences.length) {
+          setUploadError('No study sentences are available for this session yet.');
+          return;
+        }
+        const drillSentences = study.sentences.map(drillSentenceFromStudy);
+        setSentences(drillSentences);
+        const startIdx = Math.min(Math.max(0, study.currentIndex || 0), drillSentences.length - 1);
+        setCardIdx(startIdx);
+        setDir('up');
+        setActiveStudyUploadId(session.id);
+        setPending(data.upload?.title || session.title || 'Audio session');
+        setPendingUpload(data.upload || session);
+        setScreen('review');
+      } catch (error) {
+        setUploadError(error.message || 'Unable to open this study session.');
+      }
+      return;
+    }
+
+    if (!needsSpeakerSelection(session) && !isStudyFailed(session)) return;
+
     try {
       const data = await fetchAudioUploadRequest(session.id);
       mergeUpload(data.upload);
@@ -1741,6 +1838,14 @@ const App = () => {
     } finally {
       setSpeakerBusy(false);
     }
+  };
+
+  const handleReviewExit = () => {
+    setActiveStudyUploadId(null);
+    setSentences(SENTENCES);
+    setCardIdx(0);
+    setScreen('home');
+    loadSessions({ quiet:true });
   };
 
   useEffect(() => {
@@ -1786,7 +1891,7 @@ const App = () => {
           ? <CorrectCard key={cur.id} sentence={cur} index={cardIdx} total={sentences.length} direction={direction} onNext={goNext} onPrev={goPrev} onJump={goJump} sentences={sentences}/>
           : <FocusCard   key={cur.id} sentence={cur} index={cardIdx} total={sentences.length} direction={direction} onNext={goNext} onPrev={goPrev} onJump={goJump} sentences={sentences}/>
       )}
-      {screen==='summary' && <SummaryScreen sentences={sentences} onDone={()=>setScreen('home')}/>}
+      {screen==='summary' && <SummaryScreen sentences={sentences} onDone={handleReviewExit}/>}
 
       {useTweaks && (
         <TweaksPanel>

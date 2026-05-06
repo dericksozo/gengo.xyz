@@ -34,6 +34,17 @@ const MAX_AUDIO_BYTES = Number(process.env.MAX_AUDIO_BYTES || 1024 * 1024 * 1024
 const AUDIO_URL_TTL_HOURS = Number(process.env.AUDIO_URL_TTL_HOURS || 24);
 const LEMONFOX_ENDPOINT = process.env.LEMONFOX_ENDPOINT || 'https://api.lemonfox.ai/v1/audio/transcriptions';
 const LEMONFOX_API_KEY = process.env.LEMONFOX_API_KEY || '';
+const DEEPSEEK_ENDPOINT = process.env.DEEPSEEK_ENDPOINT || 'https://api.deepseek.com/chat/completions';
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+const DEEPSEEK_REQUEST_TIMEOUT_MS = Number(process.env.DEEPSEEK_REQUEST_TIMEOUT_MS || 5 * 60 * 1000);
+const PROMPT_TEMPLATE_PATH = path.join(__dirname, 'prompt.txt');
+let promptTemplate = '';
+try {
+  promptTemplate = fsSync.readFileSync(PROMPT_TEMPLATE_PATH, 'utf8');
+} catch (error) {
+  promptTemplate = '';
+}
 
 const ALLOWED_AUDIO_EXTENSIONS = new Set([
   '.mp3', '.wav', '.flac', '.aac', '.opus', '.ogg', '.m4a',
@@ -86,11 +97,46 @@ db.exec(`
     completed_at TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS study_sessions (
+    id INTEGER PRIMARY KEY,
+    audio_upload_id INTEGER NOT NULL UNIQUE REFERENCES audio_uploads(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    selected_speaker TEXT NOT NULL,
+    speaker_label TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'processing',
+    error TEXT,
+    prompt_text TEXT,
+    deepseek_request_json TEXT,
+    deepseek_response_json TEXT,
+    sentence_count INTEGER NOT NULL DEFAULT 0,
+    current_index INTEGER NOT NULL DEFAULT 0,
+    completed_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS study_sentences (
+    id INTEGER PRIMARY KEY,
+    study_session_id INTEGER NOT NULL REFERENCES study_sessions(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    original_sentence TEXT NOT NULL,
+    grade TEXT NOT NULL,
+    slightly_corrected_sentence TEXT,
+    native_speaker_version TEXT,
+    explanation TEXT,
+    done INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(study_session_id, position)
+  );
+
   CREATE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions(token_hash);
   CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS audio_uploads_user_id_idx ON audio_uploads(user_id);
   CREATE INDEX IF NOT EXISTS audio_uploads_file_token_hash_idx ON audio_uploads(file_token_hash);
   CREATE INDEX IF NOT EXISTS audio_uploads_callback_token_hash_idx ON audio_uploads(callback_token_hash);
+  CREATE INDEX IF NOT EXISTS study_sessions_user_id_idx ON study_sessions(user_id);
+  CREATE INDEX IF NOT EXISTS study_sentences_session_id_idx ON study_sentences(study_session_id);
 `);
 
 function tableColumns(table) {
@@ -113,6 +159,16 @@ function tableColumns(table) {
     SET status = 'speaker_selection', updated_at = datetime('now')
     WHERE status = 'completed' AND selected_speaker IS NULL
   `);
+  db.exec(`
+    UPDATE study_sessions
+    SET status = 'error', error = 'Server restarted while DeepSeek was processing this session.', updated_at = datetime('now')
+    WHERE status = 'processing'
+  `);
+  db.exec(`
+    UPDATE audio_uploads
+    SET status = 'study_failed', updated_at = datetime('now')
+    WHERE status = 'study_processing'
+  `);
 }
 
 function buildTranscriptText(lemonfoxResponse) {
@@ -127,6 +183,42 @@ function buildTranscriptText(lemonfoxResponse) {
     lines.push(`${speaker}: ${text}`);
   }
   return lines.join('\n');
+}
+
+function speakerFriendlyLabel(value) {
+  const v = String(value ?? '').trim();
+  if (!v) return 'Speaker';
+  const numeric = v.match(/^(?:speaker[_\s-]?)?0*(\d+)$/i);
+  if (numeric) return `Speaker ${numeric[1]}`;
+  return v;
+}
+
+function buildFriendlyTranscriptText(lemonfoxResponse) {
+  const segments = Array.isArray(lemonfoxResponse?.segments) ? lemonfoxResponse.segments : [];
+  const lines = [];
+  for (const segment of segments) {
+    const speakerRaw = segment?.speaker ?? segment?.speaker_label ?? segment?.speaker_id;
+    const textRaw = segment?.text;
+    const speaker = speakerRaw === undefined || speakerRaw === null ? '' : String(speakerRaw).trim();
+    const text = textRaw === undefined || textRaw === null ? '' : String(textRaw).replace(/\s+/g, ' ').trim();
+    if (!speaker || !text) continue;
+    lines.push(`${speakerFriendlyLabel(speaker)}: ${text}`);
+  }
+  return lines.join('\n');
+}
+
+function buildDeepseekPrompt(transcriptText, selectedSpeaker) {
+  if (!promptTemplate) {
+    throw new Error('Prompt template is missing on the server.');
+  }
+  const friendlyLabel = speakerFriendlyLabel(selectedSpeaker);
+  const withSpeaker = promptTemplate.replace(/Speaker\s*1/g, friendlyLabel);
+  const transcript = String(transcriptText || '').trim();
+  const filled = withSpeaker.replace(
+    /<TRANSCRIPT>[\s\S]*?<\/TRANSCRIPT>/,
+    `<TRANSCRIPT>\n${transcript}\n</TRANSCRIPT>`
+  );
+  return `${filled}\n\nReturn the response as a JSON object with a single key "sentences" whose value is the JSON array described above. Do not include any other keys or surrounding text.`;
 }
 
 function backfillTranscriptTextForExistingRows() {
@@ -196,14 +288,22 @@ const statements = {
     RETURNING id, user_id, title, original_filename, mime_type, size_bytes, status, selected_speaker, created_at, updated_at, completed_at
   `),
   listAudioUploads: db.prepare(`
-    SELECT id, title, original_filename, mime_type, size_bytes, status, selected_speaker, lemonfox_error, created_at, updated_at, submitted_at, completed_at
-    FROM audio_uploads
-    WHERE user_id = ?
-    ORDER BY created_at DESC
+    SELECT
+      a.id, a.title, a.original_filename, a.mime_type, a.size_bytes, a.status,
+      a.selected_speaker, a.lemonfox_error, a.created_at, a.updated_at,
+      a.submitted_at, a.completed_at,
+      s.status AS study_status, s.error AS study_error,
+      s.sentence_count AS study_sentence_count,
+      s.completed_count AS study_completed_count,
+      s.current_index AS study_current_index
+    FROM audio_uploads a
+    LEFT JOIN study_sessions s ON s.audio_upload_id = a.id
+    WHERE a.user_id = ?
+    ORDER BY a.created_at DESC
     LIMIT 50
   `),
   getAudioUploadForUser: db.prepare(`
-    SELECT id, title, original_filename, mime_type, size_bytes, status, selected_speaker, lemonfox_error, lemonfox_response_json, created_at, updated_at, submitted_at, completed_at
+    SELECT id, title, original_filename, mime_type, size_bytes, status, selected_speaker, lemonfox_error, lemonfox_response_json, lemonfox_transcript_text, created_at, updated_at, submitted_at, completed_at
     FROM audio_uploads
     WHERE id = ? AND user_id = ?
   `),
@@ -244,10 +344,84 @@ const statements = {
   `),
   selectUploadSpeaker: db.prepare(`
     UPDATE audio_uploads
-    SET selected_speaker = ?, status = 'speaker_selected',
+    SET selected_speaker = ?, status = 'study_processing',
         speaker_selected_at = datetime('now'), updated_at = datetime('now')
     WHERE id = ? AND user_id = ?
     RETURNING id, title, original_filename, mime_type, size_bytes, status, selected_speaker, lemonfox_error, created_at, updated_at, submitted_at, completed_at
+  `),
+  setUploadStudyStatus: db.prepare(`
+    UPDATE audio_uploads
+    SET status = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `),
+  upsertStudySession: db.prepare(`
+    INSERT INTO study_sessions (audio_upload_id, user_id, selected_speaker, speaker_label, status)
+    VALUES (?, ?, ?, ?, 'processing')
+    ON CONFLICT(audio_upload_id) DO UPDATE SET
+      user_id = excluded.user_id,
+      selected_speaker = excluded.selected_speaker,
+      speaker_label = excluded.speaker_label,
+      status = 'processing',
+      error = NULL,
+      sentence_count = 0,
+      current_index = 0,
+      completed_count = 0,
+      completed_at = NULL,
+      updated_at = datetime('now')
+    RETURNING id
+  `),
+  markStudySessionReady: db.prepare(`
+    UPDATE study_sessions
+    SET status = 'ready', error = NULL,
+        prompt_text = ?, deepseek_request_json = ?, deepseek_response_json = ?,
+        sentence_count = ?, completed_at = datetime('now'), updated_at = datetime('now')
+    WHERE id = ?
+  `),
+  markStudySessionError: db.prepare(`
+    UPDATE study_sessions
+    SET status = 'error', error = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `),
+  deleteStudySentencesForSession: db.prepare(`
+    DELETE FROM study_sentences WHERE study_session_id = ?
+  `),
+  insertStudySentence: db.prepare(`
+    INSERT INTO study_sentences (
+      study_session_id, position, original_sentence, grade,
+      slightly_corrected_sentence, native_speaker_version, explanation
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `),
+  getStudySessionForUser: db.prepare(`
+    SELECT id, audio_upload_id, user_id, selected_speaker, speaker_label, status, error,
+           sentence_count, current_index, completed_count, created_at, updated_at, completed_at
+    FROM study_sessions
+    WHERE audio_upload_id = ? AND user_id = ?
+  `),
+  getStudySentencesForSession: db.prepare(`
+    SELECT id, position, original_sentence, grade, slightly_corrected_sentence,
+           native_speaker_version, explanation, done
+    FROM study_sentences
+    WHERE study_session_id = ?
+    ORDER BY position ASC
+  `),
+  updateStudyCurrentIndex: db.prepare(`
+    UPDATE study_sessions
+    SET current_index = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `),
+  setStudySentenceDone: db.prepare(`
+    UPDATE study_sentences
+    SET done = ?
+    WHERE id = ? AND study_session_id = ?
+  `),
+  recountStudyCompleted: db.prepare(`
+    UPDATE study_sessions
+    SET completed_count = (
+      SELECT COUNT(*) FROM study_sentences
+      WHERE study_session_id = study_sessions.id AND done = 1
+    ),
+    updated_at = datetime('now')
+    WHERE id = ?
   `),
 };
 
@@ -594,7 +768,7 @@ function publicBaseUrl(req) {
 }
 
 function publicAudioUpload(row) {
-  return {
+  const payload = {
     id: row.id,
     title: row.title,
     filename: row.original_filename,
@@ -608,6 +782,16 @@ function publicAudioUpload(row) {
     submittedAt: row.submitted_at || null,
     completedAt: row.completed_at || null,
   };
+  if (row.study_status !== undefined) {
+    payload.study = {
+      status: row.study_status || null,
+      error: row.study_error || null,
+      sentenceCount: row.study_sentence_count || 0,
+      completedCount: row.study_completed_count || 0,
+      currentIndex: row.study_current_index || 0,
+    };
+  }
+  return payload;
 }
 
 function transcriptForAudioUpload(row, req = null) {
@@ -856,6 +1040,251 @@ async function handleAuth(req, res, url) {
   return text(res, 404, 'Not Found\n');
 }
 
+function publicStudySession(row, sentences = []) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    audioUploadId: row.audio_upload_id,
+    selectedSpeaker: row.selected_speaker,
+    speakerLabel: row.speaker_label,
+    status: row.status,
+    error: row.error || null,
+    sentenceCount: row.sentence_count || 0,
+    currentIndex: row.current_index || 0,
+    completedCount: row.completed_count || 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at || null,
+    sentences: sentences.map(s => ({
+      id: s.id,
+      position: s.position,
+      originalSentence: s.original_sentence,
+      grade: s.grade,
+      slightlyCorrectedSentence: s.slightly_corrected_sentence,
+      nativeSpeakerVersion: s.native_speaker_version,
+      explanation: s.explanation,
+      done: !!s.done,
+    })),
+  };
+}
+
+function extractSentencesArray(parsed) {
+  if (Array.isArray(parsed)) return parsed;
+  if (!parsed || typeof parsed !== 'object') return null;
+  if (Array.isArray(parsed.sentences)) return parsed.sentences;
+  for (const value of Object.values(parsed)) {
+    if (Array.isArray(value)) return value;
+  }
+  return null;
+}
+
+function normalizeStudySentence(item, position) {
+  if (!item || typeof item !== 'object') return null;
+  const original = String(item.original_sentence ?? item.original ?? '').trim();
+  if (!original) return null;
+  const gradeRaw = String(item.grade ?? '').trim().toLowerCase();
+  const grade = ['correct', 'slightly unnatural', 'incorrect'].includes(gradeRaw)
+    ? gradeRaw
+    : 'slightly unnatural';
+  const slightly = item.slightly_corrected_sentence == null
+    ? null
+    : String(item.slightly_corrected_sentence).trim() || null;
+  const native = item.native_speaker_version == null
+    ? null
+    : String(item.native_speaker_version).trim() || null;
+  const explanation = item.explanation == null
+    ? null
+    : String(item.explanation).trim() || null;
+  return {
+    position,
+    original_sentence: original,
+    grade,
+    slightly_corrected_sentence: slightly,
+    native_speaker_version: native,
+    explanation,
+  };
+}
+
+async function callDeepseek(prompt) {
+  if (!DEEPSEEK_API_KEY) {
+    throw new Error('Set DEEPSEEK_API_KEY before processing study sessions.');
+  }
+  const requestBody = {
+    model: DEEPSEEK_MODEL,
+    messages: [{ role: 'user', content: prompt }],
+    response_format: { type: 'json_object' },
+    temperature: 0.2,
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEEPSEEK_REQUEST_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(DEEPSEEK_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timer);
+    if (error?.name === 'AbortError') {
+      throw new Error(`DeepSeek request timed out after ${DEEPSEEK_REQUEST_TIMEOUT_MS}ms.`);
+    }
+    throw new Error(`DeepSeek request failed: ${error?.message || error}`);
+  }
+  clearTimeout(timer);
+
+  const bodyText = await response.text();
+  let parsedBody;
+  try {
+    parsedBody = bodyText ? JSON.parse(bodyText) : {};
+  } catch {
+    parsedBody = { raw: bodyText };
+  }
+
+  if (!response.ok) {
+    const message = parsedBody?.error?.message || parsedBody?.message || `DeepSeek returned ${response.status}.`;
+    const error = new Error(String(message));
+    error.deepseekStatus = response.status;
+    error.deepseekBody = parsedBody;
+    throw error;
+  }
+
+  const content = parsedBody?.choices?.[0]?.message?.content;
+  if (!content || typeof content !== 'string') {
+    const error = new Error('DeepSeek returned no message content.');
+    error.deepseekBody = parsedBody;
+    throw error;
+  }
+
+  let parsedContent;
+  try {
+    parsedContent = JSON.parse(content);
+  } catch {
+    const trimmed = content.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+    try {
+      parsedContent = JSON.parse(trimmed);
+    } catch {
+      const error = new Error('DeepSeek response was not valid JSON.');
+      error.deepseekBody = parsedBody;
+      error.deepseekContent = content;
+      throw error;
+    }
+  }
+
+  return { requestBody, responseBody: parsedBody, content: parsedContent };
+}
+
+async function processStudySession({ uploadId, userId, selectedSpeaker, transcriptText, lemonfoxResponse, logTag = {} }) {
+  const friendlyTranscript = buildFriendlyTranscriptText(lemonfoxResponse) || transcriptText || '';
+  const studyRow = statements.upsertStudySession.get(
+    uploadId,
+    userId,
+    selectedSpeaker,
+    speakerFriendlyLabel(selectedSpeaker)
+  );
+  const studyId = studyRow?.id;
+  if (!studyId) {
+    logLine('error', 'study_session_upsert_failed', { uploadId, ...logTag });
+    return;
+  }
+
+  let prompt;
+  try {
+    prompt = buildDeepseekPrompt(friendlyTranscript, selectedSpeaker);
+  } catch (error) {
+    statements.markStudySessionError.run(error.message || String(error), studyId);
+    statements.setUploadStudyStatus.run('study_failed', uploadId);
+    logLine('error', 'study_prompt_build_failed', {
+      uploadId, studyId, error: errorDetail(error), ...logTag,
+    });
+    return;
+  }
+
+  logLine('info', 'deepseek_submit_started', {
+    uploadId, studyId, model: DEEPSEEK_MODEL, promptBytes: Buffer.byteLength(prompt), ...logTag,
+  });
+
+  let result;
+  try {
+    result = await callDeepseek(prompt);
+  } catch (error) {
+    const message = error.message || 'DeepSeek call failed.';
+    statements.markStudySessionError.run(message, studyId);
+    statements.setUploadStudyStatus.run('study_failed', uploadId);
+    logLine('error', 'deepseek_submit_failed', {
+      uploadId, studyId, error: errorDetail(error),
+      deepseekStatus: error.deepseekStatus || null,
+      ...logTag,
+    });
+    return;
+  }
+
+  const sentencesRaw = extractSentencesArray(result.content);
+  if (!Array.isArray(sentencesRaw) || !sentencesRaw.length) {
+    statements.markStudySessionError.run('DeepSeek did not return any sentences.', studyId);
+    statements.setUploadStudyStatus.run('study_failed', uploadId);
+    logLine('error', 'deepseek_no_sentences', {
+      uploadId, studyId, contentKeys: result.content && typeof result.content === 'object' ? Object.keys(result.content) : null,
+      ...logTag,
+    });
+    return;
+  }
+
+  const normalized = sentencesRaw
+    .map((item, idx) => normalizeStudySentence(item, idx))
+    .filter(Boolean);
+
+  if (!normalized.length) {
+    statements.markStudySessionError.run('DeepSeek sentences were empty after normalization.', studyId);
+    statements.setUploadStudyStatus.run('study_failed', uploadId);
+    return;
+  }
+
+  db.exec('BEGIN');
+  try {
+    statements.deleteStudySentencesForSession.run(studyId);
+    for (const item of normalized) {
+      statements.insertStudySentence.run(
+        studyId,
+        item.position,
+        item.original_sentence,
+        item.grade,
+        item.slightly_corrected_sentence,
+        item.native_speaker_version,
+        item.explanation
+      );
+    }
+    statements.markStudySessionReady.run(
+      prompt,
+      JSON.stringify(result.requestBody),
+      JSON.stringify(result.responseBody),
+      normalized.length,
+      studyId
+    );
+    statements.setUploadStudyStatus.run('study_ready', uploadId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    statements.markStudySessionError.run(error.message || 'Failed to save study sentences.', studyId);
+    statements.setUploadStudyStatus.run('study_failed', uploadId);
+    logLine('error', 'study_session_save_failed', {
+      uploadId, studyId, error: errorDetail(error), ...logTag,
+    });
+    return;
+  }
+
+  logLine('info', 'study_session_ready', {
+    uploadId, studyId, sentenceCount: normalized.length, ...logTag,
+  });
+}
+
 async function submitToLemonfox(req, upload, fileToken, callbackToken) {
   const sourceUrl = `${publicBaseUrl(req)}/api/audio/source/${upload.id}/${fileToken}`;
   const callbackUrl = `${publicBaseUrl(req)}/api/audio/lemonfox/callback/${upload.id}/${callbackToken}`;
@@ -1072,6 +1501,29 @@ async function handleAudio(req, res, url) {
 
       return streamAudioUpload(req, res, upload);
     }
+
+    const studyUploadId = parseUploadChildPath(url.pathname, 'study');
+    if (studyUploadId !== null && req.method === 'GET') {
+      const user = requireUser(req, res);
+      if (!user) return;
+
+      const upload = statements.getAudioUploadForUser.get(studyUploadId, user.id);
+      if (!upload) {
+        markRequestLogError(req, 404, 'Upload not found.', { uploadId: studyUploadId });
+        return text(res, 404, 'Not Found\n');
+      }
+
+      const studyRow = statements.getStudySessionForUser.get(studyUploadId, user.id);
+      if (!studyRow) {
+        return json(res, 200, { upload: publicAudioUpload(upload), study: null });
+      }
+
+      const sentenceRows = statements.getStudySentencesForSession.all(studyRow.id);
+      return json(res, 200, {
+        upload: publicAudioUpload(upload),
+        study: publicStudySession(studyRow, sentenceRows),
+      });
+    }
   }
 
   if (url.pathname.startsWith('/api/audio/uploads/') && req.method === 'POST') {
@@ -1107,7 +1559,7 @@ async function handleAudio(req, res, url) {
       if (!speakers.includes(speaker)) {
         return json(res, 400, { error: 'Choose one of the speakers Lemonfox found in this transcript.' });
       }
-      if (!['speaker_selection', 'completed', 'speaker_selected'].includes(upload.status)) {
+      if (!['speaker_selection', 'completed', 'speaker_selected', 'study_processing', 'study_ready', 'study_failed'].includes(upload.status)) {
         return json(res, 409, { error: 'Speaker selection is not available for this upload yet.' });
       }
 
@@ -1116,7 +1568,76 @@ async function handleAudio(req, res, url) {
         uploadId: upload.id,
         speaker,
       });
-      return json(res, 200, { upload: publicAudioUpload(updated), transcript });
+
+      const lemonfoxResponse = transcript;
+      const transcriptText = upload.lemonfox_transcript_text || buildTranscriptText(lemonfoxResponse);
+      processStudySession({
+        uploadId: upload.id,
+        userId: user.id,
+        selectedSpeaker: speaker,
+        transcriptText,
+        lemonfoxResponse,
+        logTag: { route: 'speaker_select' },
+      }).catch(error => {
+        logLine('error', 'study_session_unhandled_error', {
+          uploadId: upload.id,
+          error: errorDetail(error),
+        });
+      });
+
+      const refreshed = statements.getAudioUploadForUser.get(upload.id, user.id);
+      return json(res, 200, { upload: publicAudioUpload(refreshed || updated), transcript });
+    }
+
+    const progressMatch = url.pathname.match(/^\/api\/audio\/uploads\/(\d+)\/study\/progress$/);
+    if (progressMatch) {
+      if (!isSameOrigin(req)) {
+        markRequestLogError(req, 403, 'Invalid request origin.', { origin: req.headers.origin || null });
+        return json(res, 403, { error: 'Invalid request origin.' });
+      }
+
+      const user = requireUser(req, res);
+      if (!user) return;
+
+      const studyUploadId = Number(progressMatch[1]);
+      const studyRow = statements.getStudySessionForUser.get(studyUploadId, user.id);
+      if (!studyRow) {
+        return json(res, 404, { error: 'No study session found for this upload.' });
+      }
+      if (studyRow.status !== 'ready') {
+        return json(res, 409, { error: 'Study session is not ready yet.' });
+      }
+
+      const body = await readJson(req);
+      const updates = [];
+
+      if (body.currentIndex !== undefined && body.currentIndex !== null) {
+        const idx = Number(body.currentIndex);
+        if (Number.isInteger(idx) && idx >= 0 && idx < (studyRow.sentence_count || 0) + 50) {
+          statements.updateStudyCurrentIndex.run(idx, studyRow.id);
+          updates.push('currentIndex');
+        }
+      }
+
+      if (Array.isArray(body.sentenceUpdates)) {
+        for (const item of body.sentenceUpdates) {
+          if (!item || typeof item !== 'object') continue;
+          const id = Number(item.id);
+          if (!Number.isInteger(id)) continue;
+          const done = item.done ? 1 : 0;
+          statements.setStudySentenceDone.run(done, id, studyRow.id);
+          updates.push(`sentence:${id}`);
+        }
+        statements.recountStudyCompleted.run(studyRow.id);
+      }
+
+      const refreshed = statements.getStudySessionForUser.get(studyUploadId, user.id);
+      const sentenceRows = statements.getStudySentencesForSession.all(refreshed.id);
+      return json(res, 200, {
+        ok: true,
+        applied: updates,
+        study: publicStudySession(refreshed, sentenceRows),
+      });
     }
   }
 
