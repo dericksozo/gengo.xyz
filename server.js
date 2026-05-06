@@ -92,6 +92,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS audio_uploads_callback_token_hash_idx ON audio_uploads(callback_token_hash);
 `);
 
+function tableColumns(table) {
+  return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(column => column.name));
+}
+
+{
+  const columns = tableColumns('audio_uploads');
+  if (!columns.has('selected_speaker')) {
+    db.exec('ALTER TABLE audio_uploads ADD COLUMN selected_speaker TEXT');
+  }
+  if (!columns.has('speaker_selected_at')) {
+    db.exec('ALTER TABLE audio_uploads ADD COLUMN speaker_selected_at TEXT');
+  }
+  db.exec(`
+    UPDATE audio_uploads
+    SET status = 'speaker_selection', updated_at = datetime('now')
+    WHERE status = 'completed' AND selected_speaker IS NULL
+  `);
+}
+
 const statements = {
   createUser: db.prepare(`
     INSERT INTO users (email, name, password_salt, password_hash)
@@ -122,17 +141,22 @@ const statements = {
       size_bytes, status, file_token_hash, file_token_expires_at, callback_token_hash
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, 'uploaded', ?, datetime('now', ?), ?)
-    RETURNING id, user_id, title, original_filename, mime_type, size_bytes, status, created_at, updated_at, completed_at
+    RETURNING id, user_id, title, original_filename, mime_type, size_bytes, status, selected_speaker, created_at, updated_at, completed_at
   `),
   listAudioUploads: db.prepare(`
-    SELECT id, title, original_filename, mime_type, size_bytes, status, lemonfox_error, created_at, updated_at, submitted_at, completed_at
+    SELECT id, title, original_filename, mime_type, size_bytes, status, selected_speaker, lemonfox_error, created_at, updated_at, submitted_at, completed_at
     FROM audio_uploads
     WHERE user_id = ?
     ORDER BY created_at DESC
     LIMIT 50
   `),
   getAudioUploadForUser: db.prepare(`
-    SELECT id, title, original_filename, mime_type, size_bytes, status, lemonfox_error, lemonfox_response_json, created_at, updated_at, submitted_at, completed_at
+    SELECT id, title, original_filename, mime_type, size_bytes, status, selected_speaker, lemonfox_error, lemonfox_response_json, created_at, updated_at, submitted_at, completed_at
+    FROM audio_uploads
+    WHERE id = ? AND user_id = ?
+  `),
+  getAudioUploadPlaybackForUser: db.prepare(`
+    SELECT id, original_filename, storage_path, mime_type, size_bytes
     FROM audio_uploads
     WHERE id = ? AND user_id = ?
   `),
@@ -162,9 +186,16 @@ const statements = {
   `),
   completeAudioUpload: db.prepare(`
     UPDATE audio_uploads
-    SET status = 'completed', lemonfox_response_json = ?, lemonfox_error = NULL,
+    SET status = 'speaker_selection', lemonfox_response_json = ?, lemonfox_error = NULL,
         completed_at = datetime('now'), updated_at = datetime('now')
     WHERE id = ?
+  `),
+  selectUploadSpeaker: db.prepare(`
+    UPDATE audio_uploads
+    SET selected_speaker = ?, status = 'speaker_selected',
+        speaker_selected_at = datetime('now'), updated_at = datetime('now')
+    WHERE id = ? AND user_id = ?
+    RETURNING id, title, original_filename, mime_type, size_bytes, status, selected_speaker, lemonfox_error, created_at, updated_at, submitted_at, completed_at
   `),
 };
 
@@ -518,6 +549,7 @@ function publicAudioUpload(row) {
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,
     status: row.status,
+    selectedSpeaker: row.selected_speaker || null,
     error: row.lemonfox_error || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -534,6 +566,18 @@ function transcriptForAudioUpload(row, req = null) {
     if (req) addRequestLogEvent(req, 'audio_transcript_parse_failed', { uploadId: row.id });
     return null;
   }
+}
+
+function speakersFromTranscript(transcript) {
+  const speakers = new Set();
+  const segments = Array.isArray(transcript?.segments) ? transcript.segments : [];
+  for (const segment of segments) {
+    const speaker = segment?.speaker ?? segment?.speaker_label ?? segment?.speaker_id;
+    if (speaker !== undefined && speaker !== null && String(speaker).trim()) {
+      speakers.add(String(speaker).trim());
+    }
+  }
+  return [...speakers];
 }
 
 async function writeRequestBodyToFile(req, destinationPath) {
@@ -585,10 +629,92 @@ async function writeRequestBodyToFile(req, destinationPath) {
   return size;
 }
 
+async function streamAudioUpload(req, res, upload) {
+  let stat;
+  try {
+    stat = await fs.stat(upload.storage_path);
+  } catch (error) {
+    markRequestLogError(req, 404, 'Audio source file missing on disk.', {
+      uploadId: upload.id,
+      code: error.code || null,
+    });
+    return text(res, 404, 'Not Found\n');
+  }
+
+  const fileSize = stat.size;
+  const baseHeaders = {
+    'Content-Type': upload.mime_type || 'application/octet-stream',
+    'Content-Disposition': `inline; filename="${encodeURIComponent(upload.original_filename)}"`,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Accept-Ranges': 'bytes',
+  };
+
+  let start = 0;
+  let end = fileSize - 1;
+  let status = 200;
+
+  const range = String(req.headers.range || '');
+  if (range) {
+    const match = range.match(/^bytes=(\d*)-(\d*)$/);
+    if (!match) {
+      res.writeHead(416, { ...baseHeaders, 'Content-Range': `bytes */${fileSize}` });
+      return res.end();
+    }
+
+    if (match[1] === '' && match[2] !== '') {
+      const suffixLength = Number(match[2]);
+      start = Math.max(0, fileSize - suffixLength);
+    } else {
+      start = Number(match[1] || 0);
+      if (match[2] !== '') end = Number(match[2]);
+    }
+
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= fileSize) {
+      res.writeHead(416, { ...baseHeaders, 'Content-Range': `bytes */${fileSize}` });
+      return res.end();
+    }
+
+    end = Math.min(end, fileSize - 1);
+    status = 206;
+  }
+
+  const contentLength = end - start + 1;
+  res.writeHead(status, {
+    ...baseHeaders,
+    'Content-Length': contentLength,
+    ...(status === 206 ? { 'Content-Range': `bytes ${start}-${end}/${fileSize}` } : {}),
+  });
+  if (req.method === 'HEAD') return res.end();
+
+  addRequestLogEvent(req, 'audio_playback_stream_started', {
+    uploadId: upload.id,
+    status,
+    start,
+    end,
+  });
+
+  const stream = fsSync.createReadStream(upload.storage_path, { start, end });
+  stream.once('error', (error) => {
+    markRequestLogError(req, 500, 'Audio playback stream failed.', {
+      uploadId: upload.id,
+      code: error.code || null,
+      message: error.message,
+    });
+    res.destroy(error);
+  });
+  return stream.pipe(res);
+}
+
 function parseUploadIdAndToken(pathname, prefix) {
   const parts = pathname.slice(prefix.length).split('/').filter(Boolean);
   if (parts.length !== 2 || !/^\d+$/.test(parts[0])) return null;
   return { id: Number(parts[0]), token: parts[1] };
+}
+
+function parseUploadChildPath(pathname, child) {
+  const match = pathname.match(new RegExp(`^/api/audio/uploads/(\\d+)/${child}$`));
+  return match ? Number(match[1]) : null;
 }
 
 async function readJsonWithLimit(req, limitBytes) {
@@ -750,8 +876,8 @@ async function submitToLemonfox(req, upload, fileToken, callbackToken) {
       return;
     }
 
-    const status = submitResponse.text || submitResponse.segments ? 'completed' : 'processing';
-    if (status === 'completed') {
+    const status = submitResponse.text || submitResponse.segments ? 'speaker_selection' : 'processing';
+    if (status === 'speaker_selection') {
       statements.completeAudioUpload.run(JSON.stringify(submitResponse), upload.id);
     }
     statements.markAudioSubmitted.run(status, JSON.stringify(requestRecord), JSON.stringify(submitResponse), upload.id);
@@ -874,6 +1000,68 @@ async function handleAudio(req, res, url) {
     });
     const transcript = transcriptForAudioUpload(refreshed, req);
     return json(res, 201, { upload: publicAudioUpload(refreshed || upload), transcript });
+  }
+
+  if (url.pathname.startsWith('/api/audio/uploads/') && (req.method === 'GET' || req.method === 'HEAD')) {
+    const playbackUploadId = parseUploadChildPath(url.pathname, 'source');
+    if (playbackUploadId !== null) {
+      const user = requireUser(req, res);
+      if (!user) return;
+
+      const upload = statements.getAudioUploadPlaybackForUser.get(playbackUploadId, user.id);
+      if (!upload) {
+        markRequestLogError(req, 404, 'Upload audio source not found.', { uploadId: playbackUploadId });
+        return text(res, 404, 'Not Found\n');
+      }
+
+      return streamAudioUpload(req, res, upload);
+    }
+  }
+
+  if (url.pathname.startsWith('/api/audio/uploads/') && req.method === 'POST') {
+    const speakerUploadId = parseUploadChildPath(url.pathname, 'speaker');
+    if (speakerUploadId !== null) {
+      if (!isSameOrigin(req)) {
+        markRequestLogError(req, 403, 'Invalid request origin.', {
+          origin: req.headers.origin || null,
+        });
+        return json(res, 403, { error: 'Invalid request origin.' });
+      }
+
+      const user = requireUser(req, res);
+      if (!user) return;
+
+      const upload = statements.getAudioUploadForUser.get(speakerUploadId, user.id);
+      if (!upload) {
+        markRequestLogError(req, 404, 'Upload not found.', { uploadId: speakerUploadId });
+        return text(res, 404, 'Not Found\n');
+      }
+
+      const body = await readJson(req);
+      const speaker = String(body.speaker ?? '').trim();
+      if (!speaker || speaker.length > 80) {
+        return json(res, 400, { error: 'Choose a speaker from the transcript.' });
+      }
+
+      const transcript = transcriptForAudioUpload(upload, req);
+      const speakers = speakersFromTranscript(transcript);
+      if (!speakers.length) {
+        return json(res, 409, { error: 'No speaker labels were found in this transcript.' });
+      }
+      if (!speakers.includes(speaker)) {
+        return json(res, 400, { error: 'Choose one of the speakers Lemonfox found in this transcript.' });
+      }
+      if (!['speaker_selection', 'completed', 'speaker_selected'].includes(upload.status)) {
+        return json(res, 409, { error: 'Speaker selection is not available for this upload yet.' });
+      }
+
+      const updated = statements.selectUploadSpeaker.get(speaker, upload.id, user.id);
+      addRequestLogEvent(req, 'audio_speaker_selected', {
+        uploadId: upload.id,
+        speaker,
+      });
+      return json(res, 200, { upload: publicAudioUpload(updated), transcript });
+    }
   }
 
   if (url.pathname.startsWith('/api/audio/uploads/') && req.method === 'GET') {

@@ -44,6 +44,8 @@
     @keyframes bloomIn  { from{opacity:0;transform:scale(0.92)} to{opacity:1;transform:scale(1)} }
     @keyframes wave     { 0%,100%{transform:scaleY(.2)} 50%{transform:scaleY(1)} }
     @keyframes expandDown { from{opacity:0;max-height:0} to{opacity:1;max-height:400px} }
+    @keyframes spin     { to{transform:rotate(360deg)} }
+    @keyframes shimmer  { 0%{transform:translateX(-120%)} 100%{transform:translateX(120%)} }
 
     .enter-right { animation: slideInR 0.36s cubic-bezier(.22,1,.36,1) both; }
     .enter-left  { animation: slideInL 0.36s cubic-bezier(.22,1,.36,1) both; }
@@ -89,6 +91,32 @@ const uploadAudioRequest = async (file) => {
   return data;
 };
 
+const listAudioUploadsRequest = async () => apiRequest('/api/audio/uploads');
+
+const fetchAudioUploadRequest = async (id) => apiRequest(`/api/audio/uploads/${id}`);
+
+const selectUploadSpeakerRequest = async (id, speaker) => apiRequest(`/api/audio/uploads/${id}/speaker`, { speaker });
+
+const SESSION_ACTIVE_STATUSES = new Set(['uploaded', 'processing']);
+const SESSION_SPEAKER_STATUSES = new Set(['speaker_selection', 'completed']);
+
+const isActiveUpload = (upload) => SESSION_ACTIVE_STATUSES.has(upload?.status);
+const needsSpeakerSelection = (upload) => SESSION_SPEAKER_STATUSES.has(upload?.status);
+
+const formatSessionDate = (value) => {
+  if (!value) return 'Just now';
+  const date = new Date(String(value).replace(' ', 'T') + (String(value).endsWith('Z') ? '' : 'Z'));
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
+};
+
+const formatFileSize = (bytes) => {
+  const size = Number(bytes) || 0;
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+  return `${size} B`;
+};
+
 const formatTranscriptTime = (seconds = 0) => {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
   const minutes = Math.floor(total / 60);
@@ -99,6 +127,73 @@ const formatTranscriptTime = (seconds = 0) => {
 const formatTranscriptDuration = (start = 0, end = 0) => {
   const duration = Math.max(1, Math.round((Number(end) || 0) - (Number(start) || 0)));
   return `${duration}s`;
+};
+
+const speakerValue = (segment) => {
+  const speaker = segment?.speaker ?? segment?.speaker_label ?? segment?.speaker_id;
+  const value = String(speaker ?? '').trim();
+  return value || 'unknown';
+};
+
+const speakerLabel = (speaker) => {
+  const value = String(speaker ?? '').trim();
+  if (!value || value === 'unknown') return 'Unknown speaker';
+  const numeric = value.match(/^(?:speaker[_\s-]?)?0*(\d+)$/i);
+  if (numeric) return `Speaker ${numeric[1]}`;
+  return value.replace(/_/g, ' ');
+};
+
+const splitTranscriptSentences = (text) => {
+  const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return [];
+  const matches = cleaned.match(/[^。！？.!?\n]+[。！？.!?]?/g) || [];
+  return matches.map(item => item.trim()).filter(Boolean);
+};
+
+const speakerSamplesFromTranscript = (transcript, maxPerSpeaker = 3) => {
+  const segments = Array.isArray(transcript?.segments) ? transcript.segments : [];
+  const orderedSegments = [...segments].sort((a,b) => (Number(a.start) || 0) - (Number(b.start) || 0));
+  const counts = new Map();
+  const speakers = [];
+  const samples = [];
+
+  for (const segment of orderedSegments) {
+    const speaker = speakerValue(segment);
+    if (!speakers.includes(speaker)) speakers.push(speaker);
+    const current = counts.get(speaker) || 0;
+    if (current >= maxPerSpeaker) continue;
+
+    const sentences = splitTranscriptSentences(segment.text);
+    if (!sentences.length) continue;
+
+    const start = Number(segment.start) || 0;
+    const end = Math.max(start + 1, Number(segment.end) || start + sentences.length);
+    const slice = (end - start) / sentences.length;
+    let count = current;
+
+    for (let i = 0; i < sentences.length && count < maxPerSpeaker; i += 1) {
+      const sampleStart = start + (slice * i);
+      const sampleEnd = i === sentences.length - 1 ? end : start + (slice * (i + 1));
+      samples.push({
+        id: `${speaker}-${segment.id ?? samples.length}-${i}`,
+        speaker,
+        speakerLabel: speakerLabel(speaker),
+        text: sentences[i],
+        startSeconds: sampleStart,
+        endSeconds: sampleEnd,
+        start: formatTranscriptTime(sampleStart),
+        dur: formatTranscriptDuration(sampleStart, sampleEnd),
+      });
+      count += 1;
+    }
+
+    counts.set(speaker, count);
+  }
+
+  return {
+    speakers: speakers.map(value => ({ value, label: speakerLabel(value), count: counts.get(value) || 0 })),
+    samples: samples.sort((a,b) => a.startSeconds - b.startSeconds),
+  };
 };
 
 const sentencesFromTranscript = (transcript) => {
@@ -221,14 +316,6 @@ const SENTENCES = [
     original:'今日はありがとうございました！' },
 ];
 
-const PAST_SESSIONS = [
-  { id:'s1', title:'Preply with Yuki', date:'May 1, 2026', sentences:20, correct:13, improved:7, avgScore:84 },
-  { id:'s2', title:'Conversation with Kenji', date:'Apr 28, 2026', sentences:15, correct:10, improved:5, avgScore:78 },
-  { id:'s3', title:'iTalki lesson', date:'Apr 24, 2026', sentences:24, correct:16, improved:8, avgScore:91 },
-  { id:'s4', title:'Coffee chat with Yuki', date:'Apr 20, 2026', sentences:11, correct:8, improved:3, avgScore:88 },
-  { id:'s5', title:'Grammar review', date:'Apr 15, 2026', sentences:18, correct:11, improved:7, avgScore:76 },
-];
-
 // ── Tag metadata ─────────────────────────────────────────────
 const TAG_META = {
   particle:     { color:'#2c5cf5', bg:'rgba(44,92,245,0.09)',  label:'助詞 particle' },
@@ -248,6 +335,17 @@ const UploadI = ({sz=28,col='currentColor'}) => <svg width={sz} height={sz} view
 const RefI    = ({sz=14,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>;
 const StarI   = ({sz=12,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill={col}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
 const SpeakerI= ({sz=16,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>;
+
+const Spinner = ({ size=16, color=C.blue, stroke=2 }) => (
+  <span style={{
+    width:size, height:size, borderRadius:'50%',
+    border:`${stroke}px solid ${color}33`,
+    borderTopColor:color,
+    display:'inline-block',
+    animation:'spin 0.8s linear infinite',
+    flexShrink:0,
+  }}/>
+);
 
 // ── Waveform ─────────────────────────────────────────────────
 const Waveform = ({ active, color=C.blue, size='md' }) => {
@@ -326,7 +424,7 @@ const ProcessingScreen = ({ title, upload, transcript, error, onDone, onBack }) 
     : ['Uploading audio…','Creating private audio URL…','Submitting to Lemonfox…','Waiting for transcription…','Ready'];
   useEffect(() => {
     if (error) return;
-    if (upload?.status === 'completed') { setStep(steps.length-1); return; }
+    if (needsSpeakerSelection(upload)) { setStep(steps.length-1); return; }
     if (upload?.status === 'processing') { setStep(Math.max(step, 3)); return; }
     if (upload?.status === 'error') { setStep(1); return; }
     if (upload && step < 2) { setStep(2); return; }
@@ -336,11 +434,11 @@ const ProcessingScreen = ({ title, upload, transcript, error, onDone, onBack }) 
   }, [step, upload?.status, error]);
   const pct = Math.round((step/(steps.length-1))*100);
   const statusText = error || upload?.error || (
-    upload?.status === 'completed'
+    needsSpeakerSelection(upload)
       ? (transcript ? (segmentCount ? `Transcript ready: ${segmentCount} segments` : 'Transcript ready') : 'Loading transcript…')
       : steps[step]
   );
-  const canContinue = Boolean(upload && upload.status === 'completed' && transcript);
+  const canContinue = Boolean(upload && needsSpeakerSelection(upload) && transcript);
   return (
     <div style={{ height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:C.bg, gap:32, animation:'fadeIn 0.4s ease' }}>
       <div style={{ textAlign:'center' }}>
@@ -374,6 +472,199 @@ const ProcessingScreen = ({ title, upload, transcript, error, onDone, onBack }) 
             border:'none', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer',
           }}>Continue</button>
         )}
+      </div>
+    </div>
+  );
+};
+
+const ClipAudioButton = ({ uploadId, startSeconds = 0, endSeconds = 0, tone = C.blue }) => {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef(null);
+  const timerRef = useRef(null);
+  const src = uploadId ? `/api/audio/uploads/${uploadId}/source` : '';
+
+  useEffect(() => () => {
+    clearTimeout(timerRef.current);
+    if (audioRef.current) audioRef.current.pause();
+  }, []);
+
+  const stop = () => {
+    clearTimeout(timerRef.current);
+    if (audioRef.current) audioRef.current.pause();
+    setPlaying(false);
+  };
+
+  const play = () => {
+    const audio = audioRef.current;
+    if (!audio || !src) {
+      setPlaying(true);
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setPlaying(false), 1200);
+      return;
+    }
+
+    if (playing) {
+      stop();
+      return;
+    }
+
+    const clipStart = Math.max(0, Number(startSeconds) || 0);
+    const clipEnd = Math.max(clipStart + 0.5, Number(endSeconds) || clipStart + 2);
+    const begin = () => {
+      clearTimeout(timerRef.current);
+      audio.pause();
+      audio.currentTime = clipStart;
+      audio.play().then(() => {
+        setPlaying(true);
+        timerRef.current = setTimeout(stop, Math.max(500, (clipEnd - clipStart) * 1000));
+      }).catch(() => {
+        setPlaying(false);
+      });
+    };
+
+    if (audio.readyState >= 1) begin();
+    else audio.addEventListener('loadedmetadata', begin, { once:true });
+  };
+
+  return (
+    <>
+      {src && <audio ref={audioRef} src={src} preload="metadata" onTimeUpdate={e=>{ if (playing && e.currentTarget.currentTime >= endSeconds) stop(); }} style={{ display:'none' }}/>}
+      <button
+        onClick={play}
+        title={playing ? 'Stop clip' : 'Play clip'}
+        style={{
+          width:34, height:34, borderRadius:'50%', border:`1px solid ${C.border2}`,
+          background: playing ? `${tone}14` : C.paper,
+          display:'flex', alignItems:'center', justifyContent:'center',
+          cursor:'pointer', transition:'all 0.15s', flexShrink:0,
+        }}
+      >
+        {playing ? <Waveform active size="sm" color={tone}/> : <PlayI sz={13} col={C.ink3}/>}
+      </button>
+    </>
+  );
+};
+
+const SpeakerSelectionScreen = ({ upload, transcript, onSubmit, onBack, busy, error }) => {
+  const data = speakerSamplesFromTranscript(transcript);
+  const [selected, setSelected] = useState(upload?.selectedSpeaker || data.speakers[0]?.value || '');
+  const selectedLabel = speakerLabel(selected);
+
+  useEffect(() => {
+    setSelected(upload?.selectedSpeaker || data.speakers[0]?.value || '');
+  }, [upload?.id, data.speakers[0]?.value]);
+
+  return (
+    <div style={{ height:'100%', display:'flex', flexDirection:'column', background:C.bg, animation:'fadeIn 0.3s ease' }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, padding:'16px clamp(20px,5vw,56px)', borderBottom:`1px solid ${C.border}`, background:C.paper }}>
+        <button onClick={onBack} style={{
+          display:'flex', alignItems:'center', gap:7, background:'none',
+          border:`1px solid ${C.border2}`, borderRadius:8, padding:'8px 13px',
+          cursor:'pointer', color:C.ink2, fontSize:13,
+        }}><ArrL sz={14} col={C.ink2}/> Home</button>
+        <div style={{ minWidth:0, textAlign:'right' }}>
+          <div style={{ fontSize:13, color:C.ink, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'48vw' }}>{upload?.title || 'Audio session'}</div>
+          <div style={{ fontSize:11, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>identify your voice</div>
+        </div>
+      </div>
+
+      <div style={{ flex:1, overflowY:'auto', padding:'26px clamp(20px,6vw,88px) 30px' }}>
+        <div style={{ maxWidth:860, margin:'0 auto', display:'flex', flexDirection:'column', gap:24 }}>
+          <div>
+            <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:10 }}>
+              Choose your speaker
+            </div>
+            <div style={{ fontSize:'clamp(26px,4vw,42px)', fontFamily:"'Newsreader',serif", color:C.ink, lineHeight:1.15, fontWeight:300, marginBottom:10 }}>
+              Which voice is yours?
+            </div>
+            <div style={{ fontSize:14, color:C.ink3, lineHeight:1.7, maxWidth:560 }}>
+              Review the first few lines Lemonfox found for each speaker, then select your speaker so the next processing step can focus on your Japanese.
+            </div>
+          </div>
+
+          {data.speakers.length > 0 ? (
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+              {data.speakers.map(speaker => {
+                const active = selected === speaker.value;
+                return (
+                  <button
+                    key={speaker.value}
+                    onClick={() => setSelected(speaker.value)}
+                    style={{
+                      display:'flex', alignItems:'center', gap:8,
+                      padding:'10px 14px', borderRadius:8,
+                      border:`1px solid ${active ? C.blue : C.border2}`,
+                      background:active ? C.blueBg : C.paper,
+                      color:active ? C.blue : C.ink2,
+                      cursor:'pointer', fontSize:13, fontWeight:600,
+                    }}
+                  >
+                    {active && <ChkI sz={13} col={C.blue}/>}
+                    {speaker.label}
+                    <span style={{ fontSize:11, color:active ? C.blue : C.ink3, fontFamily:"'DM Mono',monospace" }}>{speaker.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ padding:'14px 16px', background:C.redBg, color:C.red, border:`1px solid ${C.red}22`, borderRadius:8, fontSize:13 }}>
+              No speaker labels were found in this transcript.
+            </div>
+          )}
+
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {data.samples.map(sample => {
+              const active = selected === sample.speaker;
+              return (
+                <div key={sample.id} style={{
+                  display:'grid', gridTemplateColumns:'minmax(92px,130px) 1fr auto',
+                  gap:14, alignItems:'center',
+                  padding:'14px 16px', borderRadius:8,
+                  border:`1px solid ${active ? `${C.blue}55` : C.border}`,
+                  background:active ? C.blueBg : C.paper,
+                }}>
+                  <div style={{ display:'flex', flexDirection:'column', gap:4, minWidth:0 }}>
+                    <button onClick={() => setSelected(sample.speaker)} style={{
+                      alignSelf:'flex-start', padding:'4px 9px', borderRadius:100,
+                      border:'none', background:active ? C.blue : C.bg2,
+                      color:active ? '#fff' : C.ink2, fontSize:11, fontWeight:700,
+                      cursor:'pointer',
+                    }}>{sample.speakerLabel}</button>
+                    <span style={{ fontSize:11, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sample.start} · {sample.dur}</span>
+                  </div>
+                  <div style={{ fontSize:'clamp(17px,2.7vw,24px)', fontFamily:"'Noto Serif JP',serif", color:C.ink, lineHeight:1.75 }}>
+                    {sample.text}
+                  </div>
+                  <ClipAudioButton uploadId={upload?.id} startSeconds={sample.startSeconds} endSeconds={sample.endSeconds} tone={active ? C.blue : C.amber}/>
+                </div>
+              );
+            })}
+          </div>
+
+          {error && (
+            <div style={{ padding:'11px 14px', background:C.redBg, color:C.red, border:`1px solid ${C.red}22`, borderRadius:8, fontSize:12, lineHeight:1.5 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display:'flex', justifyContent:'flex-end', paddingTop:4 }}>
+            <button
+              onClick={() => selected && onSubmit(selected)}
+              disabled={!selected || busy || !data.speakers.length}
+              style={{
+                display:'flex', alignItems:'center', gap:9,
+                padding:'12px 20px', border:'none', borderRadius:8,
+                background:selected && !busy && data.speakers.length ? C.ink : C.border2,
+                color:C.bg, cursor:selected && !busy && data.speakers.length ? 'pointer' : 'default',
+                fontSize:14, fontWeight:700,
+              }}
+            >
+              {busy && <Spinner size={14} color={C.bg}/>}
+              Next as {selectedLabel}
+              {!busy && <ArrR sz={15} col={C.bg}/>}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -710,60 +1001,111 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
 
 // ── Session card (home) ───────────────────────────────────────
 const SessionCard = ({ session, onResume }) => {
-  const remaining = session.sentences - session.correct - session.improved;
+  const active = isActiveUpload(session);
+  const selectingSpeaker = needsSpeakerSelection(session);
+  const selectedSpeaker = session.status === 'speaker_selected';
+  const failed = session.status === 'error';
+  const clickable = selectingSpeaker;
+  const status = failed
+    ? { label:'Transcription failed', detail:session.error || 'Open the logs for Lemonfox details.', color:C.red, bg:C.redBg }
+    : active
+      ? { label:'Transcribing audio', detail:'Lemonfox is processing this recording.', color:C.blue, bg:C.blueBg }
+      : selectingSpeaker
+        ? { label:'Select speaker', detail:'Transcript is ready. Choose which speaker is you.', color:C.amber, bg:C.amberBg }
+        : selectedSpeaker
+          ? { label:'Speaker selected', detail:`${speakerLabel(session.selectedSpeaker)} selected. Waiting for the next processing step.`, color:C.green, bg:C.greenBg }
+        : { label:'Audio uploaded', detail:'Waiting to begin transcription.', color:C.amber, bg:C.amberBg };
+
   return (
     <div
-      onClick={() => onResume(session)}
+      onClick={() => clickable && onResume(session)}
       style={{
         background:C.paper, borderRadius:14, border:`1px solid ${C.border}`,
-        padding:'18px 20px', cursor:'pointer', transition:'box-shadow 0.2s, transform 0.2s',
+        padding:'18px 20px', cursor:clickable?'pointer':'default', transition:'box-shadow 0.2s, transform 0.2s',
         boxShadow:'0 1px 4px rgba(0,0,0,0.04)',
+        position:'relative', overflow:'hidden',
       }}
-      onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 6px 24px rgba(0,0,0,0.08)'; e.currentTarget.style.transform='translateY(-1px)'; }}
+      onMouseEnter={e=>{
+        if (!clickable) return;
+        e.currentTarget.style.boxShadow='0 6px 24px rgba(0,0,0,0.08)';
+        e.currentTarget.style.transform='translateY(-1px)';
+      }}
       onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'; e.currentTarget.style.transform='none'; }}
     >
+      {active && (
+        <div style={{
+          position:'absolute', inset:'0 auto 0 0', width:'46%',
+          background:`linear-gradient(90deg, transparent, ${C.blueBg}, transparent)`,
+          animation:'shimmer 1.8s ease-in-out infinite',
+          pointerEvents:'none',
+        }}/>
+      )}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
-        <div>
+        <div style={{ minWidth:0, flex:1, paddingRight:12 }}>
           <div style={{ fontSize:15, fontWeight:600, color:C.ink, marginBottom:3 }}>{session.title}</div>
-          <div style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{session.date}</div>
+          <div style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{formatSessionDate(session.createdAt)}</div>
         </div>
-        {session.avgScore && (
-          <div style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 10px', borderRadius:100, background:session.avgScore>=80?C.greenBg:C.amberBg, color:session.avgScore>=80?C.green:C.amber, fontSize:12, fontWeight:600 }}>
-            <StarI sz={10} col={session.avgScore>=80?C.green:C.amber}/>
-            {session.avgScore}
+        <div style={{
+          display:'flex', alignItems:'center', gap:7,
+          padding:'4px 10px', borderRadius:100,
+          background:status.bg, color:status.color,
+          fontSize:11, fontWeight:600, whiteSpace:'nowrap',
+        }}>
+        {active && <Spinner size={12} color={status.color} stroke={2}/>}
+          {(selectingSpeaker || selectedSpeaker) && <ChkI sz={12} col={status.color}/>}
+          {failed && <span style={{ fontFamily:"'DM Mono',monospace" }}>!</span>}
+          {status.label}
+        </div>
+      </div>
+
+      <div style={{
+        display:'flex', alignItems:'center', gap:12,
+        padding:'12px 14px', borderRadius:10,
+        background: active ? C.bg2 : failed ? C.redBg : C.bg,
+        border:`1px solid ${failed ? `${C.red}22` : C.border}`,
+        marginBottom:12,
+      }}>
+        <div style={{
+          width:36, height:36, borderRadius:'50%',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          background:status.bg, color:status.color, flexShrink:0,
+        }}>
+          {active ? <Spinner size={16} color={status.color}/> : (selectingSpeaker || selectedSpeaker) ? <ChkI sz={17} col={status.color}/> : failed ? '!' : <UploadI sz={17} col={status.color}/>}
+        </div>
+        <div style={{ minWidth:0, flex:1 }}>
+          <div style={{ fontSize:13, color:C.ink, fontWeight:600, marginBottom:2 }}>{status.detail}</div>
+          <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:11, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>
+            <span>{session.filename}</span>
+            <span>{formatFileSize(session.sizeBytes)}</span>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Mini progress bar strip */}
-      <div style={{ display:'flex', gap:3, marginBottom:12 }}>
-        {Array.from({length:session.sentences}).map((_,i) => {
-          const isCorrect  = i < session.correct;
-          const isImproved = !isCorrect && i < session.correct + session.improved;
-          return (
+      {active ? (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:4 }}>
+          {[0,1,2].map(i => (
             <div key={i} style={{
-              flex:1, height:3, borderRadius:2,
-              background: isCorrect ? C.green : isImproved ? C.greenLight : C.border2,
-              border: isImproved && !isCorrect ? `1px solid ${C.green}` : 'none',
+              height:4, borderRadius:2, background:i===0?C.blue:C.border2,
+              opacity:i===0?1:0.6,
+              animation:`pulse 1.2s ease ${i*0.18}s infinite`,
             }}/>
-          );
-        })}
-      </div>
-
-      {/* Stats row — clear language */}
-      <div style={{ display:'flex', gap:14, fontSize:12, flexWrap:'wrap' }}>
-        <span style={{ color:C.ink3 }}><b style={{ color:C.ink2, fontFamily:"'DM Mono',monospace" }}>{session.sentences}</b> sentences</span>
-        <span style={{ color:C.ink3 }}><b style={{ color:C.green, fontFamily:"'DM Mono',monospace" }}>{session.correct}</b> already correct</span>
-        <span style={{ color:C.ink3 }}><b style={{ color:C.blue, fontFamily:"'DM Mono',monospace" }}>{session.improved}</b> improved</span>
-        {remaining > 0 && <span style={{ color:C.ink3 }}><b style={{ color:C.amber, fontFamily:"'DM Mono',monospace" }}>{remaining}</b> remaining</span>}
-        {remaining === 0 && <span style={{ color:C.green, fontFamily:"'DM Mono',monospace", fontSize:11 }}>✓ complete</span>}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display:'flex', gap:14, fontSize:12, flexWrap:'wrap', alignItems:'center' }}>
+          <span style={{ color:C.ink3 }}><b style={{ color:status.color, fontFamily:"'DM Mono',monospace" }}>{selectingSpeaker ? 'speaker' : selectedSpeaker ? 'queued' : failed ? 'error' : session.status}</b></span>
+          {selectingSpeaker && <span style={{ color:C.ink3 }}>Open this session and identify your voice.</span>}
+          {selectedSpeaker && <span style={{ color:C.ink3 }}>The next processing pass is not implemented yet.</span>}
+          {!selectingSpeaker && !selectedSpeaker && !failed && <span style={{ color:C.ink3 }}>No lesson data has been generated yet.</span>}
+          {failed && <span style={{ color:C.red }}>Transcription did not complete.</span>}
+        </div>
+      )}
     </div>
   );
 };
 
 // ── Auth menu (sign-in / profile dropdown) ───────────────────
-const AuthMenu = ({ user, onSignIn, onSignUp, onSignOut }) => {
+const AuthMenu = ({ user, onSignIn, onSignUp, onSignOut, sessions=[] }) => {
   const [open, setOpen]   = useState(false);
   const [mode, setMode]   = useState('signin'); // signin | signup
   const [email, setEmail] = useState('');
@@ -875,9 +1217,9 @@ const AuthMenu = ({ user, onSignIn, onSignUp, onSignOut }) => {
               {/* Mini stats */}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:1, background:C.border, borderBottom:`1px solid ${C.border}` }}>
                 {[
-                  { v:'5',   l:'sessions' },
-                  { v:'58',  l:'corrected' },
-                  { v:'84',  l:'avg score' },
+                  { v:String(sessions.length), l:'sessions' },
+                  { v:String(sessions.filter(needsSpeakerSelection).length), l:'speaker' },
+                  { v:String(sessions.filter(isActiveUpload).length), l:'processing' },
                 ].map(s => (
                   <div key={s.l} style={{ background:C.paper, padding:'12px 8px', textAlign:'center' }}>
                     <div style={{ fontSize:16, fontWeight:600, fontFamily:"'DM Mono',monospace", color:C.ink, lineHeight:1 }}>{s.v}</div>
@@ -1017,12 +1359,15 @@ const linkBtnStyle = {
 };
 
 // ── Home screen ───────────────────────────────────────────────
-const HomeScreen = ({ sessions, onUpload, onResume, user, onSignIn, onSignUp, onSignOut, uploadError }) => {
+const HomeScreen = ({ sessions, onUpload, onResume, user, onSignIn, onSignUp, onSignOut, uploadError, uploadBusy, sessionsLoading }) => {
   const [drag, setDrag] = useState(false);
   const fileRef = useRef(null);
-  const pickFile = () => fileRef.current?.click();
+  const pickFile = () => {
+    if (uploadBusy) return;
+    fileRef.current?.click();
+  };
   const submitFile = (file) => {
-    if (!file) return;
+    if (!file || uploadBusy) return;
     onUpload(file);
   };
   return (
@@ -1036,7 +1381,7 @@ const HomeScreen = ({ sessions, onUpload, onResume, user, onSignIn, onSignUp, on
         pointerEvents:'none',
       }}>
         <div style={{ pointerEvents:'auto' }}>
-          <AuthMenu user={user} onSignIn={onSignIn} onSignUp={onSignUp} onSignOut={onSignOut}/>
+          <AuthMenu user={user} onSignIn={onSignIn} onSignUp={onSignUp} onSignOut={onSignOut} sessions={sessions}/>
         </div>
       </div>
 
@@ -1051,33 +1396,43 @@ const HomeScreen = ({ sessions, onUpload, onResume, user, onSignIn, onSignUp, on
 
         {/* Upload zone — Gengo3 slim style */}
         <div
-          onDragOver={e=>{e.preventDefault();setDrag(true)}}
+          onDragOver={e=>{e.preventDefault();if(!uploadBusy)setDrag(true)}}
           onDragLeave={()=>setDrag(false)}
           onDrop={e=>{e.preventDefault();setDrag(false);submitFile(e.dataTransfer.files?.[0]);}}
           onClick={pickFile}
           style={{
-            border:`2px dashed ${drag?C.blue:C.border2}`,
+            border:`2px dashed ${uploadBusy?C.blue:drag?C.blue:C.border2}`,
             borderRadius:12, padding:'22px 28px',
             display:'flex', alignItems:'center', gap:16,
-            cursor:'pointer', background:drag?C.blueBg:C.paper,
+            cursor:uploadBusy?'default':'pointer', background:uploadBusy||drag?C.blueBg:C.paper,
             transition:'all 0.2s', marginBottom:32,
+            opacity:uploadBusy?0.95:1,
           }}
         >
           <input
             ref={fileRef}
             type="file"
             accept="audio/*,video/mp4,video/quicktime,video/webm,.mp3,.wav,.flac,.aac,.opus,.ogg,.m4a,.mp4,.mpeg,.mov,.webm,.m4v"
-            onChange={e=>submitFile(e.target.files?.[0])}
+            disabled={uploadBusy}
+            onChange={e=>{submitFile(e.target.files?.[0]); e.currentTarget.value='';}}
             style={{ display:'none' }}
           />
-          <div style={{ color:drag?C.blue:C.ink3, transition:'color 0.2s', flexShrink:0 }}>
-            <UploadI sz={24} col={drag?C.blue:C.ink3}/>
+          <div style={{ color:uploadBusy||drag?C.blue:C.ink3, transition:'color 0.2s', flexShrink:0 }}>
+            {uploadBusy ? <Spinner size={24} color={C.blue} stroke={2}/> : <UploadI sz={24} col={drag?C.blue:C.ink3}/>}
           </div>
           <div style={{ flex:1 }}>
-            <div style={{ fontSize:14, fontWeight:500, color:C.ink, marginBottom:2 }}>Upload a new session</div>
-            <div style={{ fontSize:12, color:C.ink3 }}>Lesson recording, conversation, Zoom call — any audio</div>
+            <div style={{ fontSize:14, fontWeight:500, color:C.ink, marginBottom:2 }}>{uploadBusy ? 'Uploading audio' : 'Upload a new session'}</div>
+            <div style={{ fontSize:12, color:C.ink3 }}>{uploadBusy ? 'Keep this page open while the file is saved.' : 'Lesson recording, conversation, Zoom call — any audio'}</div>
           </div>
-          <div style={{ padding:'8px 18px', background:C.ink, color:C.bg, borderRadius:8, fontSize:13, fontWeight:600, flexShrink:0 }}>Browse</div>
+          <div style={{
+            display:'flex', alignItems:'center', gap:8,
+            padding:'8px 18px', background:uploadBusy?C.blue:C.ink,
+            color:C.bg, borderRadius:8, fontSize:13, fontWeight:600, flexShrink:0,
+            minWidth:92, justifyContent:'center',
+          }}>
+            {uploadBusy && <Spinner size={13} color={C.bg} stroke={2}/>}
+            {uploadBusy ? 'Uploading' : 'Browse'}
+          </div>
         </div>
         {uploadError && (
           <div style={{ marginTop:-20, marginBottom:28, padding:'11px 14px', background:C.redBg, color:C.red, border:`1px solid ${C.red}22`, borderRadius:8, fontSize:12, lineHeight:1.5 }}>
@@ -1085,11 +1440,17 @@ const HomeScreen = ({ sessions, onUpload, onResume, user, onSignIn, onSignUp, on
           </div>
         )}
 
-        {/* Past sessions */}
-        {sessions.length > 0 && (
+        {/* Sessions */}
+        {(sessionsLoading || sessions.length > 0) && (
           <>
-            <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:14 }}>Past sessions</div>
+            <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:14 }}>Sessions</div>
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {sessionsLoading && sessions.length === 0 && (
+                <div style={{ padding:'18px 20px', background:C.paper, borderRadius:14, border:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:12, color:C.ink3, fontSize:13 }}>
+                  <Spinner size={16} color={C.ink3}/>
+                  Loading sessions
+                </div>
+              )}
               {sessions.map(s => <SessionCard key={s.id} session={s} onResume={onResume}/>)}
             </div>
           </>
@@ -1237,11 +1598,14 @@ const App = () => {
 
   const [user, setUser]         = useState(null);
   const [screen, setScreen]     = useState('home');
-  const [sessions, setSessions] = useState(PAST_SESSIONS);
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const [pendingTitle, setPending] = useState('');
   const [pendingUpload, setPendingUpload] = useState(null);
   const [pendingTranscript, setPendingTranscript] = useState(null);
   const [uploadError, setUploadError] = useState('');
+  const [speakerBusy, setSpeakerBusy] = useState(false);
   const [sentences, setSentences] = useState(SENTENCES);
   const [cardIdx, setCardIdx]   = useState(0);
   const [direction, setDir]     = useState('up');
@@ -1269,6 +1633,7 @@ const App = () => {
   const handleSignOut = async () => {
     await apiRequest('/api/auth/logout', {});
     setUser(null);
+    setSessions([]);
   };
 
   const goTo   = (idx, dir) => { setDir(dir); setCardIdx(idx); };
@@ -1276,36 +1641,111 @@ const App = () => {
   const goPrev = () => { if (cardIdx > 0) goTo(cardIdx-1,'left'); };
   const goJump = (idx) => goTo(idx, idx > cardIdx ? 'right' : 'left');
 
+  const mergeUpload = (upload) => {
+    if (!upload) return;
+    setSessions(prev => {
+      const next = [upload, ...prev.filter(item => item.id !== upload.id)];
+      return next.sort((a,b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    });
+  };
+
+  const loadSessions = async ({ quiet = false } = {}) => {
+    if (!user) {
+      setSessions([]);
+      return;
+    }
+    if (!quiet) setSessionsLoading(true);
+    try {
+      const data = await listAudioUploadsRequest();
+      setSessions(Array.isArray(data.uploads) ? data.uploads : []);
+    } catch (error) {
+      if (!quiet) setUploadError(error.message || 'Unable to load sessions.');
+    } finally {
+      if (!quiet) setSessionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSessions();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user || !sessions.some(isActiveUpload)) return;
+    const t = setInterval(() => {
+      loadSessions({ quiet:true });
+    }, 2500);
+    return () => clearInterval(t);
+  }, [user?.id, sessions]);
+
   const handleUpload  = async (file) => {
+    if (uploadBusy) return;
     setUploadError('');
     setPending(file.name || 'New audio session');
-    setPendingUpload({ status:'uploading' });
+    setPendingUpload(null);
     setPendingTranscript(null);
-    setScreen('processing');
+    setUploadBusy(true);
 
     try {
       const data = await uploadAudioRequest(file);
-      setPendingUpload(data.upload);
-      if (data.transcript) setPendingTranscript(data.transcript);
+      mergeUpload(data.upload);
+      if (data.transcript) {
+        setPendingUpload(data.upload);
+        setPendingTranscript(data.transcript);
+      }
     } catch (error) {
       setUploadError(error.message);
       setPendingUpload(null);
       setPendingTranscript(null);
-      setScreen('home');
+    } finally {
+      setUploadBusy(false);
     }
   };
   const handleDone    = () => {
-    const transcriptSentences = sentencesFromTranscript(pendingTranscript);
-    setSentences(transcriptSentences.length ? transcriptSentences : SENTENCES);
-    setCardIdx(0);
-    setDir('up');
-    setScreen('review');
+    if (!pendingUpload || !pendingTranscript) return;
+    setUploadError('');
+    setScreen('speaker');
   };
-  const handleResume  = () => { setSentences(SENTENCES); setCardIdx(0); setDir('up'); setScreen('review'); };
+  const handleResume  = async (session) => {
+    if (!session || !needsSpeakerSelection(session)) return;
+    setUploadError('');
+    try {
+      const data = await fetchAudioUploadRequest(session.id);
+      mergeUpload(data.upload);
+      const samples = speakerSamplesFromTranscript(data.transcript);
+      if (!samples.samples.length) {
+        setUploadError('Transcript is marked ready, but no transcript text was returned yet.');
+        return;
+      }
+      setPending(data.upload?.title || session.title || 'Audio session');
+      setPendingUpload(data.upload);
+      setPendingTranscript(data.transcript);
+      setScreen('speaker');
+    } catch (error) {
+      setUploadError(error.message || 'Unable to open this session.');
+    }
+  };
+
+  const handleSpeakerSubmit = async (speaker) => {
+    if (!pendingUpload?.id || speakerBusy) return;
+    setSpeakerBusy(true);
+    setUploadError('');
+    try {
+      const data = await selectUploadSpeakerRequest(pendingUpload.id, speaker);
+      mergeUpload(data.upload);
+      setPendingUpload(data.upload);
+      setPendingTranscript(data.transcript || pendingTranscript);
+      setScreen('home');
+      loadSessions({ quiet:true });
+    } catch (error) {
+      setUploadError(error.message || 'Unable to save your speaker.');
+    } finally {
+      setSpeakerBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (screen !== 'processing' || !pendingUpload?.id || pendingUpload.status === 'error') return;
-    if (pendingUpload.status === 'completed' && pendingTranscript) return;
+    if (needsSpeakerSelection(pendingUpload) && pendingTranscript) return;
     const t = setInterval(async () => {
       try {
         const data = await apiRequest(`/api/audio/uploads/${pendingUpload.id}`);
@@ -1315,7 +1755,7 @@ const App = () => {
         // Keep the current progress state; the upload itself already succeeded.
       }
     }, 2500);
-    if (pendingUpload.status === 'completed' && !pendingTranscript) {
+    if (needsSpeakerSelection(pendingUpload) && !pendingTranscript) {
       apiRequest(`/api/audio/uploads/${pendingUpload.id}`).then(data => {
         setPendingUpload(data.upload);
         if (data.transcript) setPendingTranscript(data.transcript);
@@ -1338,8 +1778,9 @@ const App = () => {
 
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:C.bg, color:C.ink, transition:'background 0.3s, color 0.3s' }}>
-      {screen==='home'       && <HomeScreen sessions={sessions} onUpload={handleUpload} onResume={handleResume} user={user} onSignIn={handleSignIn} onSignUp={handleSignUp} onSignOut={handleSignOut} uploadError={uploadError}/>}
+      {screen==='home'       && <HomeScreen sessions={sessions} onUpload={handleUpload} onResume={handleResume} user={user} onSignIn={handleSignIn} onSignUp={handleSignUp} onSignOut={handleSignOut} uploadError={uploadError} uploadBusy={uploadBusy} sessionsLoading={sessionsLoading}/>}
       {screen==='processing' && <ProcessingScreen title={pendingTitle} upload={pendingUpload} transcript={pendingTranscript} error={uploadError} onDone={handleDone} onBack={()=>setScreen('home')}/>}
+      {screen==='speaker'    && <SpeakerSelectionScreen upload={pendingUpload} transcript={pendingTranscript} onSubmit={handleSpeakerSubmit} onBack={()=>setScreen('home')} busy={speakerBusy} error={uploadError}/>}
       {screen==='review'     && cur && (
         cur.correct
           ? <CorrectCard key={cur.id} sentence={cur} index={cardIdx} total={sentences.length} direction={direction} onNext={goNext} onPrev={goPrev} onJump={goJump} sentences={sentences}/>
