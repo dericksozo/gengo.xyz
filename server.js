@@ -34,10 +34,14 @@ const CALLBACK_JSON_LIMIT_BYTES = 25 * 1024 * 1024;
 const MAX_AUDIO_BYTES = Number(process.env.MAX_AUDIO_BYTES || 1024 * 1024 * 1024);
 const AUDIO_URL_TTL_HOURS = Number(process.env.AUDIO_URL_TTL_HOURS || 24);
 const LEMONFOX_ENDPOINT = process.env.LEMONFOX_ENDPOINT || 'https://api.lemonfox.ai/v1/audio/transcriptions';
-const LEMONFOX_TTS_ENDPOINT = process.env.LEMONFOX_TTS_ENDPOINT || 'https://api.lemonfox.ai/v1/audio/speech';
-const LEMONFOX_TTS_VOICE = process.env.LEMONFOX_TTS_VOICE || 'kumo';
-const LEMONFOX_TTS_LANGUAGE = process.env.LEMONFOX_TTS_LANGUAGE || 'ja';
 const LEMONFOX_API_KEY = process.env.LEMONFOX_API_KEY || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-3.1-flash-tts-preview';
+const GEMINI_TTS_VOICE = process.env.GEMINI_TTS_VOICE || 'Algieba';
+const GEMINI_TTS_LANGUAGE = process.env.GEMINI_TTS_LANGUAGE || 'ja';
+const GEMINI_API_BASE = process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_TTS_CONTEXT = process.env.GEMINI_TTS_CONTEXT
+  || "A native Japanese speaker speaking at a natural speed so that an N1-level Japanese learner can clearly understand what they're saying using standard Japanese.";
 const DEEPSEEK_ENDPOINT = process.env.DEEPSEEK_ENDPOINT || 'https://api.deepseek.com/chat/completions';
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro';
@@ -1559,9 +1563,48 @@ async function submitToLemonfox(req, upload, fileToken, callbackToken) {
   }
 }
 
+function pcmToWav(pcm, { sampleRate, bitsPerSample = 16, numChannels = 1 }) {
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+function packageGeminiAudio(rawAudio, mimeType) {
+  const lower = String(mimeType || '').toLowerCase();
+  if (lower.includes('audio/l16') || lower.includes('audio/pcm') || lower.includes('codec=pcm')) {
+    const rateMatch = lower.match(/rate=(\d+)/);
+    const sampleRate = rateMatch ? Number(rateMatch[1]) : 24000;
+    return { buffer: pcmToWav(rawAudio, { sampleRate }), mime: 'audio/wav', extension: '.wav' };
+  }
+  if (lower.includes('audio/wav') || lower.includes('audio/x-wav')) {
+    return { buffer: rawAudio, mime: 'audio/wav', extension: '.wav' };
+  }
+  if (lower.includes('audio/mpeg') || lower.includes('audio/mp3')) {
+    return { buffer: rawAudio, mime: 'audio/mpeg', extension: '.mp3' };
+  }
+  if (lower.includes('audio/ogg')) {
+    return { buffer: rawAudio, mime: 'audio/ogg', extension: '.ogg' };
+  }
+  return { buffer: pcmToWav(rawAudio, { sampleRate: 24000 }), mime: 'audio/wav', extension: '.wav' };
+}
+
 async function synthesizeNativeAudio({ text, userId, sentenceId, req }) {
-  if (!LEMONFOX_API_KEY) {
-    const error = new Error('Set LEMONFOX_API_KEY before requesting native audio.');
+  if (!GEMINI_API_KEY) {
+    const error = new Error('Set GEMINI_API_KEY before requesting native audio.');
     error.status = 500;
     throw error;
   }
@@ -1573,40 +1616,54 @@ async function synthesizeNativeAudio({ text, userId, sentenceId, req }) {
     throw error;
   }
 
-  const body = {
-    input: trimmed,
-    voice: LEMONFOX_TTS_VOICE,
-    language: LEMONFOX_TTS_LANGUAGE,
-    response_format: 'mp3',
+  const promptText = `## Sample Context:\n${GEMINI_TTS_CONTEXT}\n\n## Transcript:\n${trimmed}`;
+
+  const requestBody = {
+    contents: [{
+      role: 'user',
+      parts: [{ text: promptText }],
+    }],
+    generationConfig: {
+      responseModalities: ['audio'],
+      temperature: 1,
+      speech_config: {
+        voice_config: {
+          prebuilt_voice_config: {
+            voice_name: GEMINI_TTS_VOICE,
+          },
+        },
+      },
+    },
   };
+
+  const endpoint = `${GEMINI_API_BASE}/models/${encodeURIComponent(GEMINI_TTS_MODEL)}:streamGenerateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
 
   addRequestLogEvent(req, 'native_audio_tts_started', {
     sentenceId,
-    voice: body.voice,
-    language: body.language,
+    provider: 'gemini',
+    model: GEMINI_TTS_MODEL,
+    voice: GEMINI_TTS_VOICE,
     inputLength: trimmed.length,
   });
 
-  const response = await fetch(LEMONFOX_TTS_ENDPOINT, {
+  const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${LEMONFOX_API_KEY}`,
-      'Content-Type': 'application/json',
-      Accept: 'audio/mpeg',
-    },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
   });
 
+  const responseText = await response.text();
+
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
     let parsedMessage = '';
     try {
-      const parsed = errorText ? JSON.parse(errorText) : null;
-      parsedMessage = parsed?.error?.message || parsed?.error || parsed?.message || '';
+      const parsed = responseText ? JSON.parse(responseText) : null;
+      const errNode = Array.isArray(parsed) ? parsed[0]?.error : parsed?.error;
+      parsedMessage = errNode?.message || (typeof errNode === 'string' ? errNode : '') || parsed?.message || '';
     } catch {
-      parsedMessage = errorText.slice(0, 200);
+      parsedMessage = responseText.slice(0, 200);
     }
-    const message = parsedMessage || `Lemonfox TTS returned ${response.status}.`;
+    const message = parsedMessage || `Gemini TTS returned ${response.status}.`;
     addRequestLogEvent(req, 'native_audio_tts_failed', {
       sentenceId,
       status: response.status,
@@ -1617,12 +1674,51 @@ async function synthesizeNativeAudio({ text, userId, sentenceId, req }) {
     throw error;
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+  let chunks;
+  try {
+    chunks = JSON.parse(responseText);
+  } catch {
+    addRequestLogEvent(req, 'native_audio_tts_parse_failed', {
+      sentenceId,
+      preview: responseText.slice(0, 200),
+    });
+    const error = new Error('Gemini TTS returned an unparseable response.');
+    error.status = 502;
+    throw error;
+  }
+  if (!Array.isArray(chunks)) chunks = [chunks];
+
+  const audioParts = [];
+  let detectedMime = '';
+  for (const chunk of chunks) {
+    const candidates = Array.isArray(chunk?.candidates) ? chunk.candidates : [];
+    for (const candidate of candidates) {
+      const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+      for (const part of parts) {
+        const inline = part?.inlineData || part?.inline_data;
+        if (inline?.data) {
+          audioParts.push(Buffer.from(inline.data, 'base64'));
+          if (!detectedMime && (inline.mimeType || inline.mime_type)) {
+            detectedMime = inline.mimeType || inline.mime_type;
+          }
+        }
+      }
+    }
+  }
+
+  if (!audioParts.length) {
+    addRequestLogEvent(req, 'native_audio_tts_empty', { sentenceId });
+    const error = new Error('Gemini TTS returned no audio data.');
+    error.status = 502;
+    throw error;
+  }
+
+  const rawAudio = Buffer.concat(audioParts);
+  const { buffer, mime, extension } = packageGeminiAudio(rawAudio, detectedMime);
 
   const dir = path.join(NATIVE_AUDIO_ROOT, String(userId));
   await fs.mkdir(dir, { recursive: true });
-  const storedFilename = `${sentenceId}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.mp3`;
+  const storedFilename = `${sentenceId}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}${extension}`;
   const storagePath = path.join(dir, storedFilename);
   await fs.writeFile(storagePath, buffer);
 
@@ -1632,11 +1728,11 @@ async function synthesizeNativeAudio({ text, userId, sentenceId, req }) {
       sentenceId,
       userId,
       trimmed,
-      LEMONFOX_TTS_VOICE,
-      LEMONFOX_TTS_LANGUAGE,
+      GEMINI_TTS_VOICE,
+      GEMINI_TTS_LANGUAGE,
       storedFilename,
       storagePath,
-      'audio/mpeg',
+      mime,
       buffer.length
     );
   } catch (error) {
@@ -1648,14 +1744,16 @@ async function synthesizeNativeAudio({ text, userId, sentenceId, req }) {
     sentenceId,
     sizeBytes: buffer.length,
     nativeAudioId: row.id,
+    mimeType: mime,
+    upstreamMime: detectedMime || null,
   });
 
-  return { row, buffer };
+  return { row, buffer, mime };
 }
 
 function sendNativeAudioBuffer(res, buffer, mimeType) {
   res.writeHead(200, {
-    'Content-Type': mimeType || 'audio/mpeg',
+    'Content-Type': mimeType || 'audio/wav',
     'Content-Length': buffer.length,
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
@@ -1700,7 +1798,7 @@ async function handleAudio(req, res, url) {
             nativeAudioId: cached.id,
             sizeBytes: buffer.length,
           });
-          return sendNativeAudioBuffer(res, buffer, cached.mime_type || 'audio/mpeg');
+          return sendNativeAudioBuffer(res, buffer, cached.mime_type || 'audio/wav');
         } catch (error) {
           addRequestLogEvent(req, 'native_audio_cache_missing', {
             sentenceId,
@@ -1721,13 +1819,13 @@ async function handleAudio(req, res, url) {
       }
 
       try {
-        const { buffer } = await synthesizeNativeAudio({
+        const { buffer, mime } = await synthesizeNativeAudio({
           text: inputText,
           userId: user.id,
           sentenceId,
           req,
         });
-        return sendNativeAudioBuffer(res, buffer, 'audio/mpeg');
+        return sendNativeAudioBuffer(res, buffer, mime || 'audio/wav');
       } catch (error) {
         const status = error.status || 500;
         markRequestLogError(req, status, error.message || 'Unable to synthesize native audio.', {
