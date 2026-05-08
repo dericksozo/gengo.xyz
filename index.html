@@ -1011,6 +1011,7 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
     setAssessing(true);
     setAssessError(null);
     try {
+      console.log('[pronunciation] sending', wavBlob.size, 'bytes to server for sentence', sentence.studyId);
       const arrayBuffer = await wavBlob.arrayBuffer();
       const res = await fetch(`/api/audio/study-sentences/${sentence.studyId}/pronunciation-assessment`, {
         method: 'POST',
@@ -1018,18 +1019,24 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
         headers: { 'Content-Type': 'audio/wav' },
         body: arrayBuffer,
       });
-      const data = await res.json().catch(() => ({}));
+      const rawText = await res.text();
+      let data = null;
+      try { data = rawText ? JSON.parse(rawText) : null; } catch {}
+      console.log('[pronunciation] response', res.status, data || rawText);
       if (!res.ok) {
-        throw new Error(data.error || `Assessment failed (${res.status}).`);
+        const message = (data && data.error) || rawText || `Assessment failed (${res.status}).`;
+        throw new Error(message);
       }
-      if (data.assessment) {
-        setAssessment(data.assessment);
-        if (userAudioUrl) {
-          try { URL.revokeObjectURL(userAudioUrl); } catch {}
-        }
-        setUserAudioUrl(URL.createObjectURL(wavBlob));
+      if (!data || !data.assessment) {
+        throw new Error('Server returned no assessment payload.');
       }
+      setAssessment(data.assessment);
+      if (userAudioUrl) {
+        try { URL.revokeObjectURL(userAudioUrl); } catch {}
+      }
+      setUserAudioUrl(URL.createObjectURL(wavBlob));
     } catch (error) {
+      console.error('[pronunciation] assessment failed', error);
       setAssessError(error.message || 'Pronunciation assessment failed.');
     } finally {
       setAssessing(false);
@@ -1091,10 +1098,13 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
         return;
       }
       const blob = new Blob(chunks, { type: recorderMimeRef.current || 'audio/webm' });
+      console.log('[pronunciation] recorded', blob.size, 'bytes', blob.type);
       try {
         const wav = await recordedBlobToWav(blob);
+        console.log('[pronunciation] converted to wav', wav.size, 'bytes');
         await submitAssessment(wav);
       } catch (error) {
+        console.error('[pronunciation] conversion or submit failed', error);
         setAssessError(error.message || 'Could not process audio.');
       }
     });
@@ -1371,9 +1381,9 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
                 </div>
               )}
 
-              {!scored && !assessing && !recording && assessment && recognitionMessage && (
+              {!scored && !assessing && !recording && assessment && (
                 <div style={{ marginTop:10, fontSize:12, color:C.amber, lineHeight:1.5 }}>
-                  {recognitionMessage}
+                  {recognitionMessage || `Assessment returned no score (status: ${assessment.recognitionStatus || 'unknown'}). Try recording again.`}
                 </div>
               )}
 

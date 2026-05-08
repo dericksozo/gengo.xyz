@@ -2064,14 +2064,32 @@ async function handleAudio(req, res, url) {
             audioBuffer,
             mimeType: isOgg ? 'audio/ogg' : 'audio/wav',
           });
+          addRequestLogEvent(req, 'pronunciation_azure_response', {
+            sentenceId,
+            recognitionStatus: azureResult && azureResult.RecognitionStatus,
+            displayText: azureResult && azureResult.DisplayText,
+            pronScore: azureResult && azureResult.NBest && azureResult.NBest[0]
+              && azureResult.NBest[0].PronunciationAssessment
+              && azureResult.NBest[0].PronunciationAssessment.PronScore,
+          });
         } catch (error) {
           const status = error.status || 502;
+          logLine('error', 'pronunciation_azure_failed', {
+            sentenceId,
+            azureStatus: error.azureStatus || null,
+            azureBody: error.azureBody || null,
+            error: errorDetail(error),
+          });
           markRequestLogError(req, status, error.message || 'Azure pronunciation assessment failed.', {
             sentenceId,
             azureStatus: error.azureStatus || null,
             azureBody: error.azureBody || null,
           });
-          return json(res, status, { error: error.message || 'Pronunciation assessment failed.' });
+          return json(res, status, {
+            error: error.message || 'Pronunciation assessment failed.',
+            azureStatus: error.azureStatus || null,
+            azureBody: error.azureBody || null,
+          });
         }
 
         const dir = path.join(PRONUNCIATION_AUDIO_ROOT, String(user.id));
