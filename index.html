@@ -816,18 +816,77 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
   const [scored, setScored]   = useState(false);
   const [score, setScore]     = useState(null);
   const [playNative, setPlayNative] = useState(false);
+  const [nativeLoading, setNativeLoading] = useState(false);
+  const [nativeError, setNativeError] = useState(null);
   const [playOwn, setPlayOwn]       = useState(false);
   const timerRef = useRef();
+  const nativeAudioRef = useRef(null);
+  const nativeAudioUrlRef = useRef(null);
   const animClass = direction==='right'?'enter-right':direction==='left'?'enter-left':'enter-up';
   const tag = TAG_META[sentence.tag] || TAG_META.naturalness;
   const canAdvance = scored && score >= 80;
+
+  useEffect(() => () => {
+    if (nativeAudioRef.current) {
+      try { nativeAudioRef.current.pause(); } catch {}
+      nativeAudioRef.current = null;
+    }
+    if (nativeAudioUrlRef.current) {
+      URL.revokeObjectURL(nativeAudioUrlRef.current);
+      nativeAudioUrlRef.current = null;
+    }
+  }, [sentence.id]);
 
   const startRec = () => { setRec(true); setRecSecs(0); timerRef.current = setInterval(()=>setRecSecs(s=>s+1),1000); };
   const stopRec  = () => {
     clearInterval(timerRef.current); setRec(false);
     setTimeout(()=>{ const s=Math.floor(72+Math.random()*26); setScore(s); setScored(true); }, 1100);
   };
-  const handlePlayNative = () => { setPlayNative(true); setTimeout(()=>setPlayNative(false), 2400); };
+  const handlePlayNative = async () => {
+    if (nativeLoading || playNative) return;
+    setNativeError(null);
+
+    if (!sentence.studyId) {
+      setPlayNative(true);
+      setTimeout(() => setPlayNative(false), 2400);
+      return;
+    }
+
+    try {
+      let audio = nativeAudioRef.current;
+      if (!audio) {
+        setNativeLoading(true);
+        const res = await fetch(`/api/audio/study-sentences/${sentence.studyId}/native-audio`, {
+          method: 'POST',
+          credentials: 'same-origin',
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Unable to load audio (${res.status}).`);
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        nativeAudioUrlRef.current = url;
+        audio = new Audio(url);
+        nativeAudioRef.current = audio;
+        audio.addEventListener('ended', () => setPlayNative(false));
+        audio.addEventListener('error', () => {
+          setPlayNative(false);
+          setNativeError('Playback failed.');
+        });
+      } else {
+        audio.currentTime = 0;
+      }
+
+      setNativeLoading(false);
+      setPlayNative(true);
+      await audio.play();
+    } catch (error) {
+      setNativeLoading(false);
+      setPlayNative(false);
+      setNativeError(error.message || 'Unable to play native audio.');
+    }
+  };
   const handlePlayOwn    = () => { setPlayOwn(true);   setTimeout(()=>setPlayOwn(false),   2000); };
   const handlePlayClip   = () => { setPlayOwn(true);   setTimeout(()=>setPlayOwn(false),   2000); };
 
@@ -924,16 +983,23 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
                 {/* Play native AI voice — icon only */}
                 <button
                   onClick={handlePlayNative}
-                  title="Hear native pronunciation"
+                  disabled={nativeLoading}
+                  title={nativeError || (nativeLoading ? 'Generating audio…' : 'Hear native pronunciation')}
                   style={{
                     width:36, height:36, borderRadius:'50%',
-                    border:`1px solid ${C.border2}`,
+                    border:`1px solid ${nativeError ? C.red : C.border2}`,
                     background: playNative ? C.greenBg : C.bg,
                     display:'flex', alignItems:'center', justifyContent:'center',
-                    cursor:'pointer', transition:'all 0.15s', flexShrink:0,
+                    cursor: nativeLoading ? 'progress' : 'pointer',
+                    transition:'all 0.15s', flexShrink:0,
+                    opacity: nativeLoading ? 0.7 : 1,
                   }}
                 >
-                  {playNative ? <Waveform active size="sm" color={C.green}/> : <SpeakerI sz={15} col={C.green}/>}
+                  {nativeLoading
+                    ? <div style={{ width:14, height:14, borderRadius:'50%', border:`2px solid ${C.green}`, borderTopColor:'transparent', animation:'spin 0.8s linear infinite' }}/>
+                    : playNative
+                      ? <Waveform active size="sm" color={C.green}/>
+                      : <SpeakerI sz={15} col={nativeError ? C.red : C.green}/>}
                 </button>
 
                 {/* Record button — icon only, or with stop */}

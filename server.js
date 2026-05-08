@@ -26,6 +26,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3000);
 const DB_PATH = path.join(__dirname, 'gengo.sqlite');
 const UPLOAD_ROOT = path.join(__dirname, 'uploads', 'audio');
+const NATIVE_AUDIO_ROOT = path.join(__dirname, 'uploads', 'native-audio');
 const SESSION_DAYS = 30;
 const SESSION_SECONDS = SESSION_DAYS * 24 * 60 * 60;
 const JSON_LIMIT_BYTES = 16 * 1024;
@@ -34,6 +35,13 @@ const MAX_AUDIO_BYTES = Number(process.env.MAX_AUDIO_BYTES || 1024 * 1024 * 1024
 const AUDIO_URL_TTL_HOURS = Number(process.env.AUDIO_URL_TTL_HOURS || 24);
 const LEMONFOX_ENDPOINT = process.env.LEMONFOX_ENDPOINT || 'https://api.lemonfox.ai/v1/audio/transcriptions';
 const LEMONFOX_API_KEY = process.env.LEMONFOX_API_KEY || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-3.1-flash-tts-preview';
+const GEMINI_TTS_VOICE = process.env.GEMINI_TTS_VOICE || 'Algieba';
+const GEMINI_TTS_LANGUAGE = process.env.GEMINI_TTS_LANGUAGE || 'ja';
+const GEMINI_API_BASE = process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_TTS_CONTEXT = process.env.GEMINI_TTS_CONTEXT
+  || "A native Japanese speaker speaking at a natural speed so that an N1-level Japanese learner can clearly understand what they're saying using standard Japanese.";
 const DEEPSEEK_ENDPOINT = process.env.DEEPSEEK_ENDPOINT || 'https://api.deepseek.com/chat/completions';
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro';
@@ -136,6 +144,23 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(study_session_id, position)
   );
+
+  CREATE TABLE IF NOT EXISTS native_audio (
+    id INTEGER PRIMARY KEY,
+    study_sentence_id INTEGER NOT NULL UNIQUE REFERENCES study_sentences(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    voice TEXT NOT NULL,
+    language TEXT NOT NULL,
+    stored_filename TEXT NOT NULL,
+    storage_path TEXT NOT NULL UNIQUE,
+    mime_type TEXT NOT NULL DEFAULT 'audio/mpeg',
+    size_bytes INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS native_audio_user_id_idx ON native_audio(user_id);
+  CREATE INDEX IF NOT EXISTS native_audio_sentence_id_idx ON native_audio(study_sentence_id);
 
   CREATE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions(token_hash);
   CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id);
@@ -438,6 +463,31 @@ const statements = {
     ),
     updated_at = datetime('now')
     WHERE id = ?
+  `),
+  getStudySentenceForUser: db.prepare(`
+    SELECT ss.id, ss.original_sentence, ss.native_speaker_version,
+           ss.slightly_corrected_sentence, ss.study_session_id,
+           sess.user_id
+    FROM study_sentences ss
+    JOIN study_sessions sess ON sess.id = ss.study_session_id
+    WHERE ss.id = ? AND sess.user_id = ?
+  `),
+  getNativeAudioForSentence: db.prepare(`
+    SELECT id, study_sentence_id, user_id, text, voice, language,
+           stored_filename, storage_path, mime_type, size_bytes, created_at
+    FROM native_audio
+    WHERE study_sentence_id = ? AND user_id = ?
+  `),
+  insertNativeAudio: db.prepare(`
+    INSERT INTO native_audio (
+      study_sentence_id, user_id, text, voice, language,
+      stored_filename, storage_path, mime_type, size_bytes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id, study_sentence_id, user_id, text, voice, language,
+              stored_filename, storage_path, mime_type, size_bytes, created_at
+  `),
+  deleteNativeAudio: db.prepare(`
+    DELETE FROM native_audio WHERE id = ?
   `),
 };
 
@@ -1513,6 +1563,205 @@ async function submitToLemonfox(req, upload, fileToken, callbackToken) {
   }
 }
 
+function pcmToWav(pcm, { sampleRate, bitsPerSample = 16, numChannels = 1 }) {
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+function packageGeminiAudio(rawAudio, mimeType) {
+  const lower = String(mimeType || '').toLowerCase();
+  if (lower.includes('audio/l16') || lower.includes('audio/pcm') || lower.includes('codec=pcm')) {
+    const rateMatch = lower.match(/rate=(\d+)/);
+    const sampleRate = rateMatch ? Number(rateMatch[1]) : 24000;
+    return { buffer: pcmToWav(rawAudio, { sampleRate }), mime: 'audio/wav', extension: '.wav' };
+  }
+  if (lower.includes('audio/wav') || lower.includes('audio/x-wav')) {
+    return { buffer: rawAudio, mime: 'audio/wav', extension: '.wav' };
+  }
+  if (lower.includes('audio/mpeg') || lower.includes('audio/mp3')) {
+    return { buffer: rawAudio, mime: 'audio/mpeg', extension: '.mp3' };
+  }
+  if (lower.includes('audio/ogg')) {
+    return { buffer: rawAudio, mime: 'audio/ogg', extension: '.ogg' };
+  }
+  return { buffer: pcmToWav(rawAudio, { sampleRate: 24000 }), mime: 'audio/wav', extension: '.wav' };
+}
+
+async function synthesizeNativeAudio({ text, userId, sentenceId, req }) {
+  if (!GEMINI_API_KEY) {
+    const error = new Error('Set GEMINI_API_KEY before requesting native audio.');
+    error.status = 500;
+    throw error;
+  }
+
+  const trimmed = String(text || '').trim();
+  if (!trimmed) {
+    const error = new Error('No native sentence text is available to synthesize.');
+    error.status = 400;
+    throw error;
+  }
+
+  const promptText = `## Sample Context:\n${GEMINI_TTS_CONTEXT}\n\n## Transcript:\n${trimmed}`;
+
+  const requestBody = {
+    contents: [{
+      role: 'user',
+      parts: [{ text: promptText }],
+    }],
+    generationConfig: {
+      responseModalities: ['audio'],
+      temperature: 1,
+      speech_config: {
+        voice_config: {
+          prebuilt_voice_config: {
+            voice_name: GEMINI_TTS_VOICE,
+          },
+        },
+      },
+    },
+  };
+
+  const endpoint = `${GEMINI_API_BASE}/models/${encodeURIComponent(GEMINI_TTS_MODEL)}:streamGenerateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+
+  addRequestLogEvent(req, 'native_audio_tts_started', {
+    sentenceId,
+    provider: 'gemini',
+    model: GEMINI_TTS_MODEL,
+    voice: GEMINI_TTS_VOICE,
+    inputLength: trimmed.length,
+  });
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
+  });
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    let parsedMessage = '';
+    try {
+      const parsed = responseText ? JSON.parse(responseText) : null;
+      const errNode = Array.isArray(parsed) ? parsed[0]?.error : parsed?.error;
+      parsedMessage = errNode?.message || (typeof errNode === 'string' ? errNode : '') || parsed?.message || '';
+    } catch {
+      parsedMessage = responseText.slice(0, 200);
+    }
+    const message = parsedMessage || `Gemini TTS returned ${response.status}.`;
+    addRequestLogEvent(req, 'native_audio_tts_failed', {
+      sentenceId,
+      status: response.status,
+      message,
+    });
+    const error = new Error(String(message));
+    error.status = 502;
+    throw error;
+  }
+
+  let chunks;
+  try {
+    chunks = JSON.parse(responseText);
+  } catch {
+    addRequestLogEvent(req, 'native_audio_tts_parse_failed', {
+      sentenceId,
+      preview: responseText.slice(0, 200),
+    });
+    const error = new Error('Gemini TTS returned an unparseable response.');
+    error.status = 502;
+    throw error;
+  }
+  if (!Array.isArray(chunks)) chunks = [chunks];
+
+  const audioParts = [];
+  let detectedMime = '';
+  for (const chunk of chunks) {
+    const candidates = Array.isArray(chunk?.candidates) ? chunk.candidates : [];
+    for (const candidate of candidates) {
+      const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+      for (const part of parts) {
+        const inline = part?.inlineData || part?.inline_data;
+        if (inline?.data) {
+          audioParts.push(Buffer.from(inline.data, 'base64'));
+          if (!detectedMime && (inline.mimeType || inline.mime_type)) {
+            detectedMime = inline.mimeType || inline.mime_type;
+          }
+        }
+      }
+    }
+  }
+
+  if (!audioParts.length) {
+    addRequestLogEvent(req, 'native_audio_tts_empty', { sentenceId });
+    const error = new Error('Gemini TTS returned no audio data.');
+    error.status = 502;
+    throw error;
+  }
+
+  const rawAudio = Buffer.concat(audioParts);
+  const { buffer, mime, extension } = packageGeminiAudio(rawAudio, detectedMime);
+
+  const dir = path.join(NATIVE_AUDIO_ROOT, String(userId));
+  await fs.mkdir(dir, { recursive: true });
+  const storedFilename = `${sentenceId}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}${extension}`;
+  const storagePath = path.join(dir, storedFilename);
+  await fs.writeFile(storagePath, buffer);
+
+  let row;
+  try {
+    row = statements.insertNativeAudio.get(
+      sentenceId,
+      userId,
+      trimmed,
+      GEMINI_TTS_VOICE,
+      GEMINI_TTS_LANGUAGE,
+      storedFilename,
+      storagePath,
+      mime,
+      buffer.length
+    );
+  } catch (error) {
+    await fs.unlink(storagePath).catch(() => {});
+    throw error;
+  }
+
+  addRequestLogEvent(req, 'native_audio_tts_saved', {
+    sentenceId,
+    sizeBytes: buffer.length,
+    nativeAudioId: row.id,
+    mimeType: mime,
+    upstreamMime: detectedMime || null,
+  });
+
+  return { row, buffer, mime };
+}
+
+function sendNativeAudioBuffer(res, buffer, mimeType) {
+  res.writeHead(200, {
+    'Content-Type': mimeType || 'audio/wav',
+    'Content-Length': buffer.length,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Accept-Ranges': 'none',
+  });
+  res.end(buffer);
+}
+
 async function handleAudio(req, res, url) {
   if (url.pathname === '/api/audio/uploads' && req.method === 'GET') {
     const user = requireUser(req, res);
@@ -1520,6 +1769,71 @@ async function handleAudio(req, res, url) {
     const uploads = statements.listAudioUploads.all(user.id).map(publicAudioUpload);
     addRequestLogDetail(req, { uploadCount: uploads.length });
     return json(res, 200, { uploads });
+  }
+
+  {
+    const nativeMatch = url.pathname.match(/^\/api\/audio\/study-sentences\/(\d+)\/native-audio$/);
+    if (nativeMatch && (req.method === 'GET' || req.method === 'POST' || req.method === 'HEAD')) {
+      if (req.method === 'POST' && !isSameOrigin(req)) {
+        markRequestLogError(req, 403, 'Invalid request origin.', { origin: req.headers.origin || null });
+        return json(res, 403, { error: 'Invalid request origin.' });
+      }
+
+      const user = requireUser(req, res);
+      if (!user) return;
+
+      const sentenceId = Number(nativeMatch[1]);
+      const sentenceRow = statements.getStudySentenceForUser.get(sentenceId, user.id);
+      if (!sentenceRow) {
+        markRequestLogError(req, 404, 'Study sentence not found.', { sentenceId });
+        return json(res, 404, { error: 'Sentence not found.' });
+      }
+
+      const cached = statements.getNativeAudioForSentence.get(sentenceId, user.id);
+      if (cached) {
+        try {
+          const buffer = await fs.readFile(cached.storage_path);
+          addRequestLogEvent(req, 'native_audio_served_cached', {
+            sentenceId,
+            nativeAudioId: cached.id,
+            sizeBytes: buffer.length,
+          });
+          return sendNativeAudioBuffer(res, buffer, cached.mime_type || 'audio/wav');
+        } catch (error) {
+          addRequestLogEvent(req, 'native_audio_cache_missing', {
+            sentenceId,
+            nativeAudioId: cached.id,
+            code: error.code || null,
+          });
+          statements.deleteNativeAudio.run(cached.id);
+        }
+      }
+
+      if (req.method !== 'POST') {
+        return json(res, 404, { error: 'Native audio not synthesized yet.' });
+      }
+
+      const inputText = sentenceRow.native_speaker_version || sentenceRow.original_sentence;
+      if (!inputText || !String(inputText).trim()) {
+        return json(res, 400, { error: 'No native sentence text is available to synthesize.' });
+      }
+
+      try {
+        const { buffer, mime } = await synthesizeNativeAudio({
+          text: inputText,
+          userId: user.id,
+          sentenceId,
+          req,
+        });
+        return sendNativeAudioBuffer(res, buffer, mime || 'audio/wav');
+      } catch (error) {
+        const status = error.status || 500;
+        markRequestLogError(req, status, error.message || 'Unable to synthesize native audio.', {
+          sentenceId,
+        });
+        return json(res, status, { error: error.message || 'Unable to synthesize native audio.' });
+      }
+    }
   }
 
   if (url.pathname === '/api/audio/uploads' && req.method === 'POST') {
