@@ -808,25 +808,192 @@ const CorrectCard = ({ sentence, index, total, direction, onNext, onPrev, onJump
   );
 };
 
+// ── Audio helpers (record + encode 16kHz mono PCM WAV) ───────
+const RECORDING_MAX_SECONDS = 25;
+
+const pickRecorderMimeType = () => {
+  if (typeof MediaRecorder === 'undefined') return '';
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/ogg',
+    'audio/mp4',
+  ];
+  for (const t of candidates) {
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return '';
+};
+
+const downsampleBuffer = (input, inputRate, targetRate) => {
+  if (targetRate === inputRate) return input;
+  if (targetRate > inputRate) throw new Error('Target sample rate is higher than input.');
+  const ratio = inputRate / targetRate;
+  const newLength = Math.round(input.length / ratio);
+  const result = new Float32Array(newLength);
+  let offsetResult = 0;
+  let offsetInput = 0;
+  while (offsetResult < newLength) {
+    const nextOffset = Math.round((offsetResult + 1) * ratio);
+    let acc = 0;
+    let count = 0;
+    for (let i = offsetInput; i < nextOffset && i < input.length; i++) {
+      acc += input[i];
+      count++;
+    }
+    result[offsetResult] = count > 0 ? acc / count : 0;
+    offsetResult++;
+    offsetInput = nextOffset;
+  }
+  return result;
+};
+
+const encodeWavPcm16 = (samples, sampleRate) => {
+  const bytesPerSample = 2;
+  const numChannels = 1;
+  const dataSize = samples.length * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeString = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+  view.setUint16(32, numChannels * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++) {
+    let s = Math.max(-1, Math.min(1, samples[i]));
+    s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    view.setInt16(offset, s, true);
+    offset += 2;
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
+};
+
+const recordedBlobToWav = async (blob) => {
+  const arrayBuffer = await blob.arrayBuffer();
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) throw new Error('AudioContext is not supported in this browser.');
+  const ctx = new Ctx();
+  let audioBuffer;
+  try {
+    audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+  } finally {
+    try { ctx.close(); } catch {}
+  }
+  const channelCount = audioBuffer.numberOfChannels;
+  const len = audioBuffer.length;
+  const mono = new Float32Array(len);
+  if (channelCount === 1) {
+    mono.set(audioBuffer.getChannelData(0));
+  } else {
+    const tmp = new Array(channelCount);
+    for (let c = 0; c < channelCount; c++) tmp[c] = audioBuffer.getChannelData(c);
+    for (let i = 0; i < len; i++) {
+      let sum = 0;
+      for (let c = 0; c < channelCount; c++) sum += tmp[c][i];
+      mono[i] = sum / channelCount;
+    }
+  }
+  const downsampled = downsampleBuffer(mono, audioBuffer.sampleRate, 16000);
+  return encodeWavPcm16(downsampled, 16000);
+};
+
 // ── FOCUS CARD (needs improvement) ───────────────────────────
 const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, sentences }) => {
   const [showCorrections, setShowCorrections] = useState(false);
   const [recording, setRec]   = useState(false);
   const [recSecs, setRecSecs] = useState(0);
-  const [scored, setScored]   = useState(false);
-  const [score, setScore]     = useState(null);
+  const [assessing, setAssessing] = useState(false);
+  const [assessment, setAssessment] = useState(null);
+  const [assessError, setAssessError] = useState(null);
   const [playNative, setPlayNative] = useState(false);
   const [nativeLoading, setNativeLoading] = useState(false);
   const [nativeError, setNativeError] = useState(null);
   const [playOwn, setPlayOwn]       = useState(false);
+  const [userAudioUrl, setUserAudioUrl] = useState(null);
   const timerRef = useRef();
+  const recorderRef = useRef(null);
+  const recorderChunksRef = useRef([]);
+  const recorderStreamRef = useRef(null);
+  const recorderMimeRef = useRef('');
+  const recorderStopHandledRef = useRef(false);
   const nativeAudioRef = useRef(null);
   const nativeAudioUrlRef = useRef(null);
+  const ownAudioRef = useRef(null);
   const animClass = direction==='right'?'enter-right':direction==='left'?'enter-left':'enter-up';
   const tag = TAG_META[sentence.tag] || TAG_META.naturalness;
+
+  const score = assessment && Number.isFinite(assessment.pronScore) ? Math.round(assessment.pronScore) : null;
+  const scored = score !== null;
   const canAdvance = scored && score >= 80;
 
+  const stopUserAudioPlayback = () => {
+    if (ownAudioRef.current) {
+      try { ownAudioRef.current.pause(); } catch {}
+      ownAudioRef.current = null;
+    }
+    setPlayOwn(false);
+  };
+
+  const cleanupRecorder = () => {
+    try {
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        recorderRef.current.stop();
+      }
+    } catch {}
+    recorderRef.current = null;
+    if (recorderStreamRef.current) {
+      try { recorderStreamRef.current.getTracks().forEach(t => t.stop()); } catch {}
+      recorderStreamRef.current = null;
+    }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  };
+
+  // Reset state and load any existing assessment whenever the sentence changes.
+  useEffect(() => {
+    setAssessment(null);
+    setAssessError(null);
+    setAssessing(false);
+    setRec(false);
+    setRecSecs(0);
+    cleanupRecorder();
+    stopUserAudioPlayback();
+    if (userAudioUrl) {
+      try { URL.revokeObjectURL(userAudioUrl); } catch {}
+    }
+    setUserAudioUrl(null);
+
+    if (!sentence.studyId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/audio/study-sentences/${sentence.studyId}/pronunciation-assessment`, {
+          credentials: 'same-origin',
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json().catch(() => ({}));
+        if (cancelled || !data || !data.assessment) return;
+        setAssessment(data.assessment);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [sentence.id]);
+
   useEffect(() => () => {
+    cleanupRecorder();
+    stopUserAudioPlayback();
     if (nativeAudioRef.current) {
       try { nativeAudioRef.current.pause(); } catch {}
       nativeAudioRef.current = null;
@@ -835,12 +1002,128 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
       URL.revokeObjectURL(nativeAudioUrlRef.current);
       nativeAudioUrlRef.current = null;
     }
-  }, [sentence.id]);
+    if (userAudioUrl) {
+      try { URL.revokeObjectURL(userAudioUrl); } catch {}
+    }
+  }, []);
 
-  const startRec = () => { setRec(true); setRecSecs(0); timerRef.current = setInterval(()=>setRecSecs(s=>s+1),1000); };
-  const stopRec  = () => {
-    clearInterval(timerRef.current); setRec(false);
-    setTimeout(()=>{ const s=Math.floor(72+Math.random()*26); setScore(s); setScored(true); }, 1100);
+  const submitAssessment = async (wavBlob) => {
+    setAssessing(true);
+    setAssessError(null);
+    try {
+      const arrayBuffer = await wavBlob.arrayBuffer();
+      const res = await fetch(`/api/audio/study-sentences/${sentence.studyId}/pronunciation-assessment`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'audio/wav' },
+        body: arrayBuffer,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Assessment failed (${res.status}).`);
+      }
+      if (data.assessment) {
+        setAssessment(data.assessment);
+        if (userAudioUrl) {
+          try { URL.revokeObjectURL(userAudioUrl); } catch {}
+        }
+        setUserAudioUrl(URL.createObjectURL(wavBlob));
+      }
+    } catch (error) {
+      setAssessError(error.message || 'Pronunciation assessment failed.');
+    } finally {
+      setAssessing(false);
+    }
+  };
+
+  const startRec = async () => {
+    if (recording || assessing) return;
+    if (!sentence.studyId) {
+      setAssessError('This sentence cannot be assessed yet.');
+      return;
+    }
+    setAssessError(null);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setAssessError('Recording is not supported in this browser.');
+      return;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (error) {
+      setAssessError(error && error.name === 'NotAllowedError'
+        ? 'Microphone permission was denied.'
+        : 'Could not access the microphone.');
+      return;
+    }
+    recorderStreamRef.current = stream;
+    const mimeType = pickRecorderMimeType();
+    recorderMimeRef.current = mimeType;
+    let recorder;
+    try {
+      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    } catch (error) {
+      cleanupRecorder();
+      setAssessError('Could not start recording.');
+      return;
+    }
+    recorderRef.current = recorder;
+    recorderChunksRef.current = [];
+    recorderStopHandledRef.current = false;
+
+    recorder.addEventListener('dataavailable', (event) => {
+      if (event.data && event.data.size > 0) recorderChunksRef.current.push(event.data);
+    });
+    recorder.addEventListener('stop', async () => {
+      if (recorderStopHandledRef.current) return;
+      recorderStopHandledRef.current = true;
+      const stream = recorderStreamRef.current;
+      if (stream) {
+        try { stream.getTracks().forEach(t => t.stop()); } catch {}
+      }
+      recorderStreamRef.current = null;
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+
+      const chunks = recorderChunksRef.current;
+      recorderChunksRef.current = [];
+      if (!chunks.length) {
+        setAssessError('No audio captured. Try again.');
+        return;
+      }
+      const blob = new Blob(chunks, { type: recorderMimeRef.current || 'audio/webm' });
+      try {
+        const wav = await recordedBlobToWav(blob);
+        await submitAssessment(wav);
+      } catch (error) {
+        setAssessError(error.message || 'Could not process audio.');
+      }
+    });
+
+    recorder.start();
+    setRec(true);
+    setRecSecs(0);
+    timerRef.current = setInterval(() => {
+      setRecSecs(prev => {
+        const next = prev + 1;
+        if (next >= RECORDING_MAX_SECONDS) {
+          if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+            try { recorderRef.current.stop(); } catch {}
+          }
+          setRec(false);
+        }
+        return next;
+      });
+    }, 1000);
+  };
+
+  const stopRec = () => {
+    if (!recording) return;
+    setRec(false);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      try { recorder.stop(); } catch {}
+    }
   };
   const handlePlayNative = async () => {
     if (nativeLoading || playNative) return;
@@ -887,14 +1170,56 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
       setNativeError(error.message || 'Unable to play native audio.');
     }
   };
-  const handlePlayOwn    = () => { setPlayOwn(true);   setTimeout(()=>setPlayOwn(false),   2000); };
-  const handlePlayClip   = () => { setPlayOwn(true);   setTimeout(()=>setPlayOwn(false),   2000); };
+  const handlePlayOwn = async () => {
+    if (playOwn) return;
+    if (!sentence.studyId && !userAudioUrl) return;
+    try {
+      const src = userAudioUrl || `/api/audio/study-sentences/${sentence.studyId}/user-recording`;
+      const audio = new Audio(src);
+      ownAudioRef.current = audio;
+      audio.addEventListener('ended', () => {
+        ownAudioRef.current = null;
+        setPlayOwn(false);
+      });
+      audio.addEventListener('error', () => {
+        ownAudioRef.current = null;
+        setPlayOwn(false);
+      });
+      setPlayOwn(true);
+      await audio.play();
+    } catch {
+      setPlayOwn(false);
+    }
+  };
+  const handlePlayClip = handlePlayOwn;
 
-  const sub = scored ? {
-    fluency:      Math.min(100, Math.round(score*(0.9+Math.random()*0.16))),
-    completeness: Math.min(100, Math.round(score*(0.88+Math.random()*0.16))),
-    rhythm:       Math.min(100, Math.round(score*(0.86+Math.random()*0.16))),
-  } : null;
+  const subScores = scored ? (() => {
+    const items = [];
+    if (Number.isFinite(assessment.accuracyScore))    items.push(['accuracy', Math.round(assessment.accuracyScore)]);
+    if (Number.isFinite(assessment.fluencyScore))     items.push(['fluency', Math.round(assessment.fluencyScore)]);
+    if (Number.isFinite(assessment.completenessScore))items.push(['completeness', Math.round(assessment.completenessScore)]);
+    return items;
+  })() : null;
+
+  const wordResults = (() => {
+    if (!assessment || !assessment.azureResponse) return null;
+    const best = Array.isArray(assessment.azureResponse.NBest) && assessment.azureResponse.NBest[0];
+    if (!best || !Array.isArray(best.Words)) return null;
+    return best.Words.map((w) => ({
+      word: w.Word,
+      accuracy: w.PronunciationAssessment ? Number(w.PronunciationAssessment.AccuracyScore) : null,
+      errorType: w.PronunciationAssessment ? w.PronunciationAssessment.ErrorType : null,
+    }));
+  })();
+
+  const recognitionStatus = assessment ? assessment.recognitionStatus : null;
+  const recognitionMessage = (() => {
+    if (!recognitionStatus || recognitionStatus === 'Success') return null;
+    if (recognitionStatus === 'NoMatch') return 'Could not recognize speech — try speaking more clearly.';
+    if (recognitionStatus === 'InitialSilenceTimeout') return 'Recording started with too much silence.';
+    if (recognitionStatus === 'BabbleTimeout') return 'Too much background noise.';
+    return `Recognition status: ${recognitionStatus}.`;
+  })();
 
   return (
     <div key={sentence.id} className={animClass} style={{ height:'100%', display:'flex', flexDirection:'column', background:C.bg, overflow:'hidden' }}>
@@ -1005,25 +1330,50 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
                 {/* Record button — icon only, or with stop */}
                 <button
                   onClick={recording ? stopRec : startRec}
-                  title={recording ? 'Stop recording' : 'Record your attempt'}
+                  disabled={assessing}
+                  title={recording ? 'Stop recording' : assessing ? 'Scoring…' : 'Record your attempt'}
                   style={{
                     width:36, height:36, borderRadius:'50%', border:'none',
-                    background: recording ? C.red : C.blue,
+                    background: recording ? C.red : assessing ? C.border2 : C.blue,
                     display:'flex', alignItems:'center', justifyContent:'center',
-                    cursor:'pointer', flexShrink:0,
-                    boxShadow: recording ? `0 0 0 5px ${C.redBg}` : `0 0 0 5px ${C.blueBg}`,
+                    cursor: assessing ? 'progress' : 'pointer', flexShrink:0,
+                    boxShadow: recording ? `0 0 0 5px ${C.redBg}` : assessing ? 'none' : `0 0 0 5px ${C.blueBg}`,
                     animation: recording ? 'pulse 1.4s ease infinite' : undefined,
                     transition:'background 0.2s, box-shadow 0.2s',
+                    opacity: assessing ? 0.7 : 1,
                   }}
                 >
-                  {recording ? <StopI sz={14} col="#fff"/> : <Mic sz={15} col="#fff"/>}
+                  {assessing
+                    ? <div style={{ width:14, height:14, borderRadius:'50%', border:`2px solid #fff`, borderTopColor:'transparent', animation:'spin 0.8s linear infinite' }}/>
+                    : recording
+                      ? <StopI sz={14} col="#fff"/>
+                      : <Mic sz={15} col="#fff"/>}
                 </button>
               </div>
 
               {recording && (
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:8, animation:'fadeIn 0.2s ease' }}>
                   <Waveform active color={C.red}/>
-                  <span style={{ fontSize:12, color:C.red, fontFamily:"'DM Mono',monospace" }}>{recSecs}s</span>
+                  <span style={{ fontSize:12, color:C.red, fontFamily:"'DM Mono',monospace" }}>{recSecs}s / {RECORDING_MAX_SECONDS}s</span>
+                </div>
+              )}
+
+              {assessing && !recording && (
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:8, fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>
+                  <div style={{ width:12, height:12, borderRadius:'50%', border:`2px solid ${C.blue}`, borderTopColor:'transparent', animation:'spin 0.8s linear infinite' }}/>
+                  Scoring your pronunciation…
+                </div>
+              )}
+
+              {assessError && !recording && !assessing && (
+                <div style={{ marginTop:10, fontSize:12, color:C.red, lineHeight:1.5 }}>
+                  {assessError}
+                </div>
+              )}
+
+              {!scored && !assessing && !recording && assessment && recognitionMessage && (
+                <div style={{ marginTop:10, fontSize:12, color:C.amber, lineHeight:1.5 }}>
+                  {recognitionMessage}
                 </div>
               )}
 
@@ -1032,7 +1382,7 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
                 <div style={{ animation:'fadeUp 0.4s ease both', marginTop:4 }}>
                   <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:16, display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-start' }}>
                     <ScoreRing score={score}/>
-                    <div style={{ flex:1, minWidth:160 }}>
+                    <div style={{ flex:1, minWidth:200 }}>
                       <div style={{ fontSize:14, fontWeight:600, color:score>=80?C.green:score>=70?C.amber:C.red, marginBottom:4 }}>
                         {score>=90?'Native-level':score>=80?'Great — moving on ✓':score>=70?'Getting closer — try again':'Keep going — you\'ll get it'}
                       </div>
@@ -1040,13 +1390,26 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
                         {score>=80?'Score 80+ achieved — this card is done.':'Score 80+ to mark this done and move on.'}
                       </div>
 
+                      {recognitionMessage && (
+                        <div style={{ fontSize:12, color:C.amber, marginBottom:12, lineHeight:1.5 }}>
+                          {recognitionMessage}
+                        </div>
+                      )}
+
+                      {assessment && assessment.displayText && (
+                        <div style={{ marginBottom:12 }}>
+                          <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:4 }}>Azure heard</div>
+                          <div style={{ fontSize:14, fontFamily:"'Noto Serif JP',serif", color:C.ink2, lineHeight:1.6 }}>{assessment.displayText}</div>
+                        </div>
+                      )}
+
                       {/* Pronunciation breakdown header */}
                       <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8 }}>Pronunciation breakdown</div>
-                      {sub && (
+                      {subScores && subScores.length > 0 && (
                         <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                          {Object.entries(sub).map(([k,v])=>(
+                          {subScores.map(([k,v])=>(
                             <div key={k} style={{ display:'flex', alignItems:'center', gap:10 }}>
-                              <div style={{ width:84, fontSize:11, color:C.ink3, fontFamily:"'DM Mono',monospace", textTransform:'capitalize' }}>{k}</div>
+                              <div style={{ width:96, fontSize:11, color:C.ink3, fontFamily:"'DM Mono',monospace", textTransform:'capitalize' }}>{k}</div>
                               <div style={{ flex:1, height:3, background:C.border2, borderRadius:2 }}>
                                 <div style={{ height:'100%', width:`${v}%`, borderRadius:2, background:v>=80?C.green:v>=70?C.amber:C.red, transition:'width 0.8s ease' }}/>
                               </div>
@@ -1056,25 +1419,68 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
                         </div>
                       )}
 
+                      {wordResults && wordResults.length > 0 && (
+                        <div style={{ marginTop:14 }}>
+                          <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:C.ink3, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8 }}>Per-word accuracy</div>
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                            {wordResults.map((w, i) => {
+                              const acc = Number.isFinite(w.accuracy) ? Math.round(w.accuracy) : null;
+                              const err = w.errorType && w.errorType !== 'None' ? w.errorType : null;
+                              const colored = err === 'Omission' ? C.red
+                                : err === 'Insertion' ? C.amber
+                                : acc === null ? C.ink3
+                                : acc >= 80 ? C.green
+                                : acc >= 60 ? C.amber
+                                : C.red;
+                              const bg = err === 'Omission' ? C.redBg
+                                : err === 'Insertion' ? C.amberBg
+                                : acc === null ? C.bg2
+                                : acc >= 80 ? C.greenBg
+                                : acc >= 60 ? C.amberBg
+                                : C.redBg;
+                              const title = err
+                                ? `${w.word} — ${err}${acc !== null ? ` (${acc})` : ''}`
+                                : acc !== null ? `${w.word} — accuracy ${acc}` : w.word;
+                              return (
+                                <span key={i} title={title} style={{
+                                  display:'inline-flex', alignItems:'center', gap:4,
+                                  padding:'4px 10px', borderRadius:8,
+                                  background: bg, color: colored,
+                                  fontFamily:"'Noto Serif JP',serif", fontSize:14,
+                                  textDecoration: err === 'Omission' ? 'line-through' : 'none',
+                                }}>
+                                  {w.word}
+                                  {acc !== null && !err && (
+                                    <span style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:colored, opacity:0.8 }}>{acc}</span>
+                                  )}
+                                  {err && (
+                                    <span style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:colored, opacity:0.8 }}>{err}</span>
+                                  )}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Hear yourself + try again row */}
                       <div style={{ display:'flex', gap:10, marginTop:12, flexWrap:'wrap', alignItems:'center' }}>
-                        <button onClick={handlePlayOwn} style={{
+                        <button onClick={handlePlayOwn} disabled={playOwn} style={{
                           display:'flex', alignItems:'center', gap:6,
                           padding:'6px 14px', borderRadius:8, border:`1px solid ${C.border2}`,
-                          background:'none', cursor:'pointer', fontSize:12, color:C.ink2,
+                          background:'none', cursor: playOwn ? 'default' : 'pointer', fontSize:12, color:C.ink2,
                           transition:'background 0.15s',
                         }}>
                           <PlayI sz={11} col={playOwn?C.amber:C.ink3}/>
                           {playOwn ? 'playing…' : 'Hear yourself'}
                         </button>
-                        {!canAdvance && (
-                          <button onClick={()=>{setScored(false);setScore(null);}} style={{
-                            display:'flex', alignItems:'center', gap:5, background:'none',
-                            border:'none', cursor:'pointer', color:C.ink3, fontSize:12, padding:0,
-                          }}>
-                            <RefI sz={12} col={C.ink3}/> Try again
-                          </button>
-                        )}
+                        <button onClick={startRec} disabled={recording || assessing} style={{
+                          display:'flex', alignItems:'center', gap:5, background:'none',
+                          border:'none', cursor: (recording || assessing) ? 'default' : 'pointer',
+                          color: (recording || assessing) ? C.border2 : C.ink3, fontSize:12, padding:0,
+                        }}>
+                          <RefI sz={12} col={(recording || assessing) ? C.border2 : C.ink3}/> Try again
+                        </button>
                       </div>
                     </div>
                   </div>
