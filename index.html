@@ -1215,11 +1215,14 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
     if (!assessment || !assessment.azureResponse) return null;
     const best = Array.isArray(assessment.azureResponse.NBest) && assessment.azureResponse.NBest[0];
     if (!best || !Array.isArray(best.Words)) return null;
-    return best.Words.map((w) => ({
-      word: w.Word,
-      accuracy: w.PronunciationAssessment ? Number(w.PronunciationAssessment.AccuracyScore) : null,
-      errorType: w.PronunciationAssessment ? w.PronunciationAssessment.ErrorType : null,
-    }));
+    return best.Words.map((w) => {
+      const pron = w.PronunciationAssessment || w;
+      return {
+        word: w.Word,
+        accuracy: pron && pron.AccuracyScore != null ? Number(pron.AccuracyScore) : null,
+        errorType: pron && pron.ErrorType ? pron.ErrorType : null,
+      };
+    });
   })();
 
   const recognitionStatus = assessment ? assessment.recognitionStatus : null;

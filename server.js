@@ -2064,14 +2064,16 @@ async function handleAudio(req, res, url) {
             audioBuffer,
             mimeType: isOgg ? 'audio/ogg' : 'audio/wav',
           });
-          addRequestLogEvent(req, 'pronunciation_azure_response', {
-            sentenceId,
-            recognitionStatus: azureResult && azureResult.RecognitionStatus,
-            displayText: azureResult && azureResult.DisplayText,
-            pronScore: azureResult && azureResult.NBest && azureResult.NBest[0]
-              && azureResult.NBest[0].PronunciationAssessment
-              && azureResult.NBest[0].PronunciationAssessment.PronScore,
-          });
+          {
+            const b = azureResult && Array.isArray(azureResult.NBest) ? azureResult.NBest[0] : null;
+            const p = b ? (b.PronunciationAssessment || b) : null;
+            addRequestLogEvent(req, 'pronunciation_azure_response', {
+              sentenceId,
+              recognitionStatus: azureResult && azureResult.RecognitionStatus,
+              displayText: azureResult && azureResult.DisplayText,
+              pronScore: p ? p.PronScore : null,
+            });
+          }
         } catch (error) {
           const status = error.status || 502;
           logLine('error', 'pronunciation_azure_failed', {
@@ -2105,10 +2107,14 @@ async function handleAudio(req, res, url) {
         }
 
         const best = Array.isArray(azureResult.NBest) && azureResult.NBest.length ? azureResult.NBest[0] : null;
-        const pron = best && best.PronunciationAssessment ? best.PronunciationAssessment : null;
+        const pron = best ? (best.PronunciationAssessment || best) : null;
         const recognitionStatus = String(azureResult.RecognitionStatus || '');
         const displayText = String(azureResult.DisplayText || (best && best.Display) || '');
         const mimeType = isOgg ? 'audio/ogg' : 'audio/wav';
+        const numOrNull = (v) => {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        };
 
         const row = statements.upsertPronunciationAssessment.get(
           sentenceId,
@@ -2119,10 +2125,10 @@ async function handleAudio(req, res, url) {
           mimeType,
           audioBuffer.length,
           JSON.stringify(azureResult),
-          pron ? Number(pron.PronScore ?? null) : null,
-          pron ? Number(pron.AccuracyScore ?? null) : null,
-          pron ? Number(pron.FluencyScore ?? null) : null,
-          pron ? Number(pron.CompletenessScore ?? null) : null,
+          pron ? numOrNull(pron.PronScore) : null,
+          pron ? numOrNull(pron.AccuracyScore) : null,
+          pron ? numOrNull(pron.FluencyScore) : null,
+          pron ? numOrNull(pron.CompletenessScore) : null,
           recognitionStatus || null,
           displayText || null
         );
