@@ -36,8 +36,15 @@ const LEMONFOX_ENDPOINT = process.env.LEMONFOX_ENDPOINT || 'https://api.lemonfox
 const LEMONFOX_API_KEY = process.env.LEMONFOX_API_KEY || '';
 const DEEPSEEK_ENDPOINT = process.env.DEEPSEEK_ENDPOINT || 'https://api.deepseek.com/chat/completions';
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
-const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro';
 const DEEPSEEK_REQUEST_TIMEOUT_MS = Number(process.env.DEEPSEEK_REQUEST_TIMEOUT_MS || 5 * 60 * 1000);
+const DEEPSEEK_MAX_TOKENS = Number(process.env.DEEPSEEK_MAX_TOKENS || 64000);
+const DEEPSEEK_THINKING = ['enabled', 'disabled'].includes(String(process.env.DEEPSEEK_THINKING || '').toLowerCase())
+  ? String(process.env.DEEPSEEK_THINKING).toLowerCase()
+  : 'disabled';
+const DEEPSEEK_REASONING_EFFORT = ['high', 'max'].includes(String(process.env.DEEPSEEK_REASONING_EFFORT || '').toLowerCase())
+  ? String(process.env.DEEPSEEK_REASONING_EFFORT).toLowerCase()
+  : 'high';
 const PROMPT_TEMPLATE_PATH = path.join(__dirname, 'prompt.txt');
 let promptTemplate = '';
 try {
@@ -382,6 +389,15 @@ const statements = {
     SET status = 'error', error = ?, updated_at = datetime('now')
     WHERE id = ?
   `),
+  markStudySessionDeepseekError: db.prepare(`
+    UPDATE study_sessions
+    SET status = 'error', error = ?,
+        prompt_text = ?,
+        deepseek_request_json = ?,
+        deepseek_response_json = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `),
   deleteStudySentencesForSession: db.prepare(`
     DELETE FROM study_sentences WHERE study_session_id = ?
   `),
@@ -474,6 +490,37 @@ function errorDetail(error) {
     message: error?.message || String(error),
     code: error?.code || null,
     stack: process.env.LOG_STACKS === '1' ? error?.stack : undefined,
+  };
+}
+
+function textPreview(value, maxChars = 4000) {
+  if (value === undefined || value === null) return null;
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}...[truncated ${text.length - maxChars} chars]`;
+}
+
+function safeJsonStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return JSON.stringify({
+      serializationError: error?.message || String(error),
+      preview: textPreview(String(value), 1000),
+    });
+  }
+}
+
+function deepseekErrorRecord(error) {
+  const content = typeof error?.deepseekContent === 'string' ? error.deepseekContent : null;
+  return {
+    error: errorDetail(error),
+    status: error?.deepseekStatus || null,
+    finishReason: error?.deepseekFinishReason || null,
+    responseBody: error?.deepseekBody || null,
+    contentBytes: content == null ? null : Buffer.byteLength(content),
+    contentPreview: textPreview(content, 12000),
+    parseError: error?.deepseekParseError ? errorDetail(error.deepseekParseError) : null,
   };
 }
 
@@ -1111,13 +1158,25 @@ async function callDeepseek(prompt) {
   }
   const requestBody = {
     model: DEEPSEEK_MODEL,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [
+      { role: 'system', content: 'Return only valid json. Do not include markdown or any surrounding text.' },
+      { role: 'user', content: prompt },
+    ],
     response_format: { type: 'json_object' },
-    temperature: 0.2,
+    max_tokens: DEEPSEEK_MAX_TOKENS,
+    thinking: { type: DEEPSEEK_THINKING },
+    stream: false,
   };
+  if (DEEPSEEK_THINKING === 'enabled') {
+    requestBody.reasoning_effort = DEEPSEEK_REASONING_EFFORT;
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DEEPSEEK_REQUEST_TIMEOUT_MS);
+
+  // --- ADDED LOG ---
+  console.log(`[DeepSeek] 🚀 Starting API request using model "${DEEPSEEK_MODEL}"...`);
+  const startTime = Date.now();
 
   let response;
   try {
@@ -1133,14 +1192,37 @@ async function callDeepseek(prompt) {
     });
   } catch (error) {
     clearTimeout(timer);
+    
+    // --- ADDED LOG ---
+    console.error(`[DeepSeek] ❌ Request failed after ${Date.now() - startTime}ms`, error.message);
+    
     if (error?.name === 'AbortError') {
-      throw new Error(`DeepSeek request timed out after ${DEEPSEEK_REQUEST_TIMEOUT_MS}ms.`);
+      const timeoutError = new Error(`DeepSeek request timed out after ${DEEPSEEK_REQUEST_TIMEOUT_MS}ms.`);
+      timeoutError.deepseekRequestBody = requestBody;
+      throw timeoutError;
     }
-    throw new Error(`DeepSeek request failed: ${error?.message || error}`);
+    const requestError = new Error(`DeepSeek request failed: ${error?.message || error}`);
+    requestError.deepseekRequestBody = requestBody;
+    throw requestError;
+  }
+
+  // --- ADDED LOG ---
+  const durationMs = Date.now() - startTime;
+  console.log(`[DeepSeek] ⏳ API responded in ${durationMs}ms with status ${response.status}.`);
+
+  let bodyText;
+  try {
+    bodyText = await response.text();
+  } catch (error) {
+    clearTimeout(timer);
+    console.error(`[DeepSeek] ❌ Failed to read response body after ${Date.now() - startTime}ms`, error.message);
+    const readError = new Error(`DeepSeek response body read failed: ${error?.message || error}`);
+    readError.deepseekStatus = response.status;
+    readError.deepseekRequestBody = requestBody;
+    throw readError;
   }
   clearTimeout(timer);
 
-  const bodyText = await response.text();
   let parsedBody;
   try {
     parsedBody = bodyText ? JSON.parse(bodyText) : {};
@@ -1150,30 +1232,71 @@ async function callDeepseek(prompt) {
 
   if (!response.ok) {
     const message = parsedBody?.error?.message || parsedBody?.message || `DeepSeek returned ${response.status}.`;
+    
+    // --- ADDED LOG ---
+    console.error(`[DeepSeek] ❌ Error response: ${message}`);
+    
     const error = new Error(String(message));
     error.deepseekStatus = response.status;
     error.deepseekBody = parsedBody;
+    error.deepseekRequestBody = requestBody;
     throw error;
   }
 
-  const content = parsedBody?.choices?.[0]?.message?.content;
+  const choice = parsedBody?.choices?.[0];
+  const content = choice?.message?.content;
   if (!content || typeof content !== 'string') {
+    // --- ADDED LOG ---
+    console.error(`[DeepSeek] ❌ Missing message content in response.`);
+    
     const error = new Error('DeepSeek returned no message content.');
+    error.deepseekStatus = response.status;
     error.deepseekBody = parsedBody;
+    error.deepseekRequestBody = requestBody;
+    error.deepseekFinishReason = choice?.finish_reason || null;
+    throw error;
+  }
+  if (choice.finish_reason === 'length') {
+    const error = new Error(`DeepSeek response was truncated. Increase DEEPSEEK_MAX_TOKENS above ${DEEPSEEK_MAX_TOKENS}.`);
+    error.deepseekStatus = response.status;
+    error.deepseekBody = parsedBody;
+    error.deepseekContent = content;
+    error.deepseekRequestBody = requestBody;
+    error.deepseekFinishReason = choice.finish_reason;
     throw error;
   }
 
   let parsedContent;
   try {
     parsedContent = JSON.parse(content);
-  } catch {
+    console.log(`[DeepSeek] ✅ Successfully parsed JSON response.`);
+  } catch (parseError) {
     const trimmed = content.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
     try {
       parsedContent = JSON.parse(trimmed);
-    } catch {
+      console.log(`[DeepSeek] ✅ Successfully parsed JSON response (from markdown code block).`);
+    } catch (markdownParseError) {
+      // --- ADDED LOG ---
+      console.error(`[DeepSeek] ❌ Failed to parse response as JSON.`);
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        message: 'deepseek_invalid_json_content',
+        status: response.status,
+        finishReason: choice?.finish_reason || null,
+        contentBytes: Buffer.byteLength(content),
+        contentPreview: textPreview(content, 4000),
+        parseError: errorDetail(markdownParseError),
+      }));
+      
       const error = new Error('DeepSeek response was not valid JSON.');
+      error.deepseekStatus = response.status;
       error.deepseekBody = parsedBody;
       error.deepseekContent = content;
+      error.deepseekRequestBody = requestBody;
+      error.deepseekFinishReason = choice?.finish_reason || null;
+      error.deepseekParseError = markdownParseError;
+      error.deepseekInitialParseError = parseError;
       throw error;
     }
   }
@@ -1216,11 +1339,22 @@ async function processStudySession({ uploadId, userId, selectedSpeaker, transcri
     result = await callDeepseek(prompt);
   } catch (error) {
     const message = error.message || 'DeepSeek call failed.';
-    statements.markStudySessionError.run(message, studyId);
+    const responseRecord = deepseekErrorRecord(error);
+    statements.markStudySessionDeepseekError.run(
+      message,
+      prompt,
+      error.deepseekRequestBody ? safeJsonStringify(error.deepseekRequestBody) : null,
+      safeJsonStringify(responseRecord),
+      studyId
+    );
     statements.setUploadStudyStatus.run('study_failed', uploadId);
     logLine('error', 'deepseek_submit_failed', {
       uploadId, studyId, error: errorDetail(error),
       deepseekStatus: error.deepseekStatus || null,
+      finishReason: error.deepseekFinishReason || null,
+      contentBytes: responseRecord.contentBytes,
+      contentPreview: responseRecord.contentPreview ? textPreview(responseRecord.contentPreview, 2000) : null,
+      parseError: responseRecord.parseError,
       ...logTag,
     });
     return;
