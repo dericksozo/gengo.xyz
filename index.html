@@ -2147,6 +2147,8 @@ const App = () => {
   const [cardIdx, setCardIdx]   = useState(0);
   const [direction, setDir]     = useState('up');
   const [activeStudyUploadId, setActiveStudyUploadId] = useState(null);
+  const [studyStreamingStatus, setStudyStreamingStatus] = useState(null);
+  const cardIdxRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -2178,6 +2180,8 @@ const App = () => {
     if (!activeStudyUploadId) return;
     updateStudyProgressRequest(activeStudyUploadId, body).catch(() => {});
   };
+
+  useEffect(() => { cardIdxRef.current = cardIdx; }, [cardIdx]);
 
   const goTo   = (idx, dir) => {
     setDir(dir);
@@ -2273,12 +2277,16 @@ const App = () => {
           setUploadError('No study sentences are available for this session yet.');
           return;
         }
-        const drillSentences = study.sentences.map(drillSentenceFromStudy);
+        const drillSentences = study.sentences
+          .slice()
+          .sort((a, b) => (a.position || 0) - (b.position || 0))
+          .map(drillSentenceFromStudy);
         setSentences(drillSentences);
         const startIdx = Math.min(Math.max(0, study.currentIndex || 0), drillSentences.length - 1);
         setCardIdx(startIdx);
         setDir('up');
         setActiveStudyUploadId(session.id);
+        setStudyStreamingStatus(study.status || 'ready');
         setPending(data.upload?.title || session.title || 'Audio session');
         setPendingUpload(data.upload || session);
         setScreen('review');
@@ -2327,11 +2335,58 @@ const App = () => {
 
   const handleReviewExit = () => {
     setActiveStudyUploadId(null);
+    setStudyStreamingStatus(null);
     setSentences(SENTENCES);
     setCardIdx(0);
     setScreen('home');
     loadSessions({ quiet:true });
   };
+
+  useEffect(() => {
+    if (screen !== 'review' || !activeStudyUploadId) return;
+    if (studyStreamingStatus !== 'processing') return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const data = await fetchStudySessionRequest(activeStudyUploadId);
+        if (cancelled) return;
+        const study = data.study;
+        if (!study) return;
+        if (Array.isArray(study.sentences) && study.sentences.length) {
+          const incoming = study.sentences
+            .slice()
+            .sort((a, b) => (a.position || 0) - (b.position || 0))
+            .map(drillSentenceFromStudy);
+          setSentences(prev => {
+            if (incoming.length === prev.length) {
+              const sameIds = incoming.every((s, i) => s.studyId === prev[i].studyId);
+              if (sameIds) return prev;
+            }
+            const prevById = new Map(prev.map(s => [s.studyId, s]));
+            const merged = incoming.map(s => {
+              const existing = prevById.get(s.studyId);
+              return existing ? { ...s, _done: existing._done || s._done } : s;
+            });
+            const idx = cardIdxRef.current;
+            const currentStudyId = prev[idx]?.studyId;
+            if (currentStudyId != null) {
+              const newIdx = merged.findIndex(s => s.studyId === currentStudyId);
+              if (newIdx >= 0 && newIdx !== idx) setCardIdx(newIdx);
+            }
+            return merged;
+          });
+        }
+        if (study.status && study.status !== 'processing') {
+          setStudyStreamingStatus(study.status);
+        }
+      } catch {
+        // Network blip; keep polling.
+      }
+    };
+    const interval = setInterval(poll, 2500);
+    poll();
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [screen, activeStudyUploadId, studyStreamingStatus]);
 
   useEffect(() => {
     if (screen !== 'processing' || !pendingUpload?.id || pendingUpload.status === 'error') return;
