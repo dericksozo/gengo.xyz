@@ -53,6 +53,11 @@ const DEEPSEEK_THINKING = ['enabled', 'disabled'].includes(String(process.env.DE
 const DEEPSEEK_REASONING_EFFORT = ['high', 'max'].includes(String(process.env.DEEPSEEK_REASONING_EFFORT || '').toLowerCase())
   ? String(process.env.DEEPSEEK_REASONING_EFFORT).toLowerCase()
   : 'high';
+const DEEPSEEK_CHUNK_SIZE = Math.max(1, Number(process.env.DEEPSEEK_CHUNK_SIZE || 8));
+const DEEPSEEK_CHUNK_OVERLAP = Math.max(0, Number(process.env.DEEPSEEK_CHUNK_OVERLAP || 2));
+const DEEPSEEK_CONCURRENCY = Math.max(1, Number(process.env.DEEPSEEK_CONCURRENCY || 6));
+const DEEPSEEK_RETRY_MAX = Math.max(0, Number(process.env.DEEPSEEK_RETRY_MAX || 4));
+const DEEPSEEK_CHUNK_MAX_TOKENS = Math.max(1024, Number(process.env.DEEPSEEK_CHUNK_MAX_TOKENS || 16000));
 const AZURE_SPEECH_KEY = process.env.AZURE_SPEECH_KEY || '';
 const AZURE_SPEECH_REGION = process.env.AZURE_SPEECH_REGION || 'japaneast';
 const AZURE_PRONUNCIATION_LANGUAGE = process.env.AZURE_PRONUNCIATION_LANGUAGE || 'ja-JP';
@@ -281,6 +286,81 @@ function buildDeepseekPrompt(transcriptText, selectedSpeaker) {
   return `${filled}\n\nReturn the response as a JSON object with a single key "sentences" whose value is the JSON array described above. Do not include any other keys or surrounding text.`;
 }
 
+function partitionTargetUtterances(segments, selectedSpeaker, chunkSize, overlap) {
+  const targetSpeakerStr = String(selectedSpeaker ?? '').trim();
+  const targetIndices = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const speakerRaw = seg?.speaker ?? seg?.speaker_label ?? seg?.speaker_id;
+    const speaker = speakerRaw === undefined || speakerRaw === null ? '' : String(speakerRaw).trim();
+    const text = seg?.text == null ? '' : String(seg.text).trim();
+    if (!speaker || !text) continue;
+    if (speaker === targetSpeakerStr) targetIndices.push(i);
+  }
+  const chunks = [];
+  if (!targetIndices.length) return { targetIndices, chunks };
+  for (let start = 0; start < targetIndices.length; start += chunkSize) {
+    const coreTargetIndices = targetIndices.slice(start, start + chunkSize);
+    const beforeTargetIndices = targetIndices.slice(Math.max(0, start - overlap), start);
+    const afterTargetIndices = targetIndices.slice(
+      start + chunkSize,
+      Math.min(targetIndices.length, start + chunkSize + overlap)
+    );
+    const firstTarget = beforeTargetIndices[0] ?? coreTargetIndices[0];
+    const lastTarget = afterTargetIndices[afterTargetIndices.length - 1]
+      ?? coreTargetIndices[coreTargetIndices.length - 1];
+    const segmentFrom = Math.max(0, firstTarget);
+    const segmentTo = Math.min(segments.length - 1, lastTarget);
+    chunks.push({
+      chunkIndex: chunks.length,
+      coreTargetIndices,
+      beforeTargetIndices,
+      afterTargetIndices,
+      segmentRange: [segmentFrom, segmentTo],
+    });
+  }
+  return { targetIndices, chunks };
+}
+
+function buildChunkPrompt(segments, selectedSpeaker, chunk) {
+  if (!promptTemplate) {
+    throw new Error('Prompt template is missing on the server.');
+  }
+  const friendlyLabel = speakerFriendlyLabel(selectedSpeaker);
+  const withSpeaker = promptTemplate.replace(/Speaker\s*1/g, friendlyLabel);
+  const targetSpeakerStr = String(selectedSpeaker ?? '').trim();
+  const coreSet = new Set(chunk.coreTargetIndices);
+  const [from, to] = chunk.segmentRange;
+  const lines = [];
+  for (let i = from; i <= to; i++) {
+    const seg = segments[i];
+    if (!seg) continue;
+    const speakerRaw = seg.speaker ?? seg.speaker_label ?? seg.speaker_id;
+    const speaker = speakerRaw == null ? '' : String(speakerRaw).trim();
+    const text = seg.text == null ? '' : String(seg.text).replace(/\s+/g, ' ').trim();
+    if (!speaker || !text) continue;
+    const isTarget = speaker === targetSpeakerStr;
+    const isCore = isTarget && coreSet.has(i);
+    const tag = isCore ? '[ANALYZE]' : '[CONTEXT]';
+    lines.push(`${tag} ${speakerFriendlyLabel(speaker)}: ${text}`);
+  }
+  const transcript = lines.join('\n');
+  const filled = withSpeaker.replace(
+    /<TRANSCRIPT>[\s\S]*?<\/TRANSCRIPT>/,
+    `<TRANSCRIPT>\n${transcript}\n</TRANSCRIPT>`
+  );
+  return `${filled}
+
+CHUNK ANALYSIS RULES:
+- The transcript above is a slice of a longer conversation. Each line is prefixed with [ANALYZE] or [CONTEXT].
+- Lines marked [CONTEXT] are provided ONLY for surrounding context. Do NOT analyze, grade, reconstruct, or include any [CONTEXT] line in your output. The neighboring chunk will handle them.
+- Lines marked [ANALYZE] are utterances by ${friendlyLabel} that you MUST reconstruct, grade, correct, and explain — exactly as the master instructions describe.
+- When grouping fragments into reconstructed sentences, only emit a sentence if its FIRST fragment is a line marked [ANALYZE]. If a reconstructed sentence's first fragment is in [CONTEXT], skip it.
+- It is acceptable to use trailing [CONTEXT] lines from ${friendlyLabel} as continuation of an [ANALYZE]-rooted sentence when the speaker keeps talking past the analyze block.
+
+Return the response as a JSON object with a single key "sentences" whose value is the JSON array described above. Do not include any other keys or surrounding text.`;
+}
+
 function backfillTranscriptTextForExistingRows() {
   const rows = db.prepare(`
     SELECT id, lemonfox_response_json
@@ -435,6 +515,20 @@ const statements = {
     SET status = 'ready', error = NULL,
         prompt_text = ?, deepseek_request_json = ?, deepseek_response_json = ?,
         sentence_count = ?, completed_at = datetime('now'), updated_at = datetime('now')
+    WHERE id = ?
+  `),
+  finalizeStudySession: db.prepare(`
+    UPDATE study_sessions
+    SET status = ?, error = ?,
+        prompt_text = ?, deepseek_request_json = ?, deepseek_response_json = ?,
+        completed_at = datetime('now'), updated_at = datetime('now')
+    WHERE id = ?
+  `),
+  bumpStudyChunkProgress: db.prepare(`
+    UPDATE study_sessions
+    SET sentence_count = sentence_count + ?,
+        completed_count = completed_count + ?,
+        updated_at = datetime('now')
     WHERE id = ?
   `),
   markStudySessionError: db.prepare(`
@@ -1265,10 +1359,14 @@ function normalizeStudySentence(item, position) {
   };
 }
 
-async function callDeepseek(prompt) {
+async function callDeepseekOnce(prompt, options = {}) {
   if (!DEEPSEEK_API_KEY) {
     throw new Error('Set DEEPSEEK_API_KEY before processing study sessions.');
   }
+  const thinking = options.thinking || DEEPSEEK_THINKING;
+  const reasoningEffort = options.reasoningEffort || DEEPSEEK_REASONING_EFFORT;
+  const maxTokens = Number(options.maxTokens || DEEPSEEK_MAX_TOKENS);
+  const tag = options.tag ? `[${options.tag}] ` : '';
   const requestBody = {
     model: DEEPSEEK_MODEL,
     messages: [
@@ -1276,19 +1374,18 @@ async function callDeepseek(prompt) {
       { role: 'user', content: prompt },
     ],
     response_format: { type: 'json_object' },
-    max_tokens: DEEPSEEK_MAX_TOKENS,
-    thinking: { type: DEEPSEEK_THINKING },
+    max_tokens: maxTokens,
+    thinking: { type: thinking },
     stream: false,
   };
-  if (DEEPSEEK_THINKING === 'enabled') {
-    requestBody.reasoning_effort = DEEPSEEK_REASONING_EFFORT;
+  if (thinking === 'enabled') {
+    requestBody.reasoning_effort = reasoningEffort;
   }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DEEPSEEK_REQUEST_TIMEOUT_MS);
 
-  // --- ADDED LOG ---
-  console.log(`[DeepSeek] 🚀 Starting API request using model "${DEEPSEEK_MODEL}"...`);
+  console.log(`[DeepSeek] ${tag}🚀 Starting API request using model "${DEEPSEEK_MODEL}" (thinking=${thinking}, max_tokens=${maxTokens})...`);
   const startTime = Date.now();
 
   let response;
@@ -1305,10 +1402,7 @@ async function callDeepseek(prompt) {
     });
   } catch (error) {
     clearTimeout(timer);
-    
-    // --- ADDED LOG ---
-    console.error(`[DeepSeek] ❌ Request failed after ${Date.now() - startTime}ms`, error.message);
-    
+    console.error(`[DeepSeek] ${tag}❌ Request failed after ${Date.now() - startTime}ms`, error.message);
     if (error?.name === 'AbortError') {
       const timeoutError = new Error(`DeepSeek request timed out after ${DEEPSEEK_REQUEST_TIMEOUT_MS}ms.`);
       timeoutError.deepseekRequestBody = requestBody;
@@ -1319,16 +1413,15 @@ async function callDeepseek(prompt) {
     throw requestError;
   }
 
-  // --- ADDED LOG ---
   const durationMs = Date.now() - startTime;
-  console.log(`[DeepSeek] ⏳ API responded in ${durationMs}ms with status ${response.status}.`);
+  console.log(`[DeepSeek] ${tag}⏳ API responded in ${durationMs}ms with status ${response.status}.`);
 
   let bodyText;
   try {
     bodyText = await response.text();
   } catch (error) {
     clearTimeout(timer);
-    console.error(`[DeepSeek] ❌ Failed to read response body after ${Date.now() - startTime}ms`, error.message);
+    console.error(`[DeepSeek] ${tag}❌ Failed to read response body after ${Date.now() - startTime}ms`, error.message);
     const readError = new Error(`DeepSeek response body read failed: ${error?.message || error}`);
     readError.deepseekStatus = response.status;
     readError.deepseekRequestBody = requestBody;
@@ -1345,10 +1438,7 @@ async function callDeepseek(prompt) {
 
   if (!response.ok) {
     const message = parsedBody?.error?.message || parsedBody?.message || `DeepSeek returned ${response.status}.`;
-    
-    // --- ADDED LOG ---
-    console.error(`[DeepSeek] ❌ Error response: ${message}`);
-    
+    console.error(`[DeepSeek] ${tag}❌ Error response (${response.status}): ${message}`);
     const error = new Error(String(message));
     error.deepseekStatus = response.status;
     error.deepseekBody = parsedBody;
@@ -1359,9 +1449,7 @@ async function callDeepseek(prompt) {
   const choice = parsedBody?.choices?.[0];
   const content = choice?.message?.content;
   if (!content || typeof content !== 'string') {
-    // --- ADDED LOG ---
-    console.error(`[DeepSeek] ❌ Missing message content in response.`);
-    
+    console.error(`[DeepSeek] ${tag}❌ Missing message content in response.`);
     const error = new Error('DeepSeek returned no message content.');
     error.deepseekStatus = response.status;
     error.deepseekBody = parsedBody;
@@ -1370,7 +1458,7 @@ async function callDeepseek(prompt) {
     throw error;
   }
   if (choice.finish_reason === 'length') {
-    const error = new Error(`DeepSeek response was truncated. Increase DEEPSEEK_MAX_TOKENS above ${DEEPSEEK_MAX_TOKENS}.`);
+    const error = new Error(`DeepSeek response was truncated. Increase DEEPSEEK_MAX_TOKENS above ${maxTokens}.`);
     error.deepseekStatus = response.status;
     error.deepseekBody = parsedBody;
     error.deepseekContent = content;
@@ -1382,15 +1470,14 @@ async function callDeepseek(prompt) {
   let parsedContent;
   try {
     parsedContent = JSON.parse(content);
-    console.log(`[DeepSeek] ✅ Successfully parsed JSON response.`);
+    console.log(`[DeepSeek] ${tag}✅ Successfully parsed JSON response.`);
   } catch (parseError) {
     const trimmed = content.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
     try {
       parsedContent = JSON.parse(trimmed);
-      console.log(`[DeepSeek] ✅ Successfully parsed JSON response (from markdown code block).`);
+      console.log(`[DeepSeek] ${tag}✅ Successfully parsed JSON response (from markdown code block).`);
     } catch (markdownParseError) {
-      // --- ADDED LOG ---
-      console.error(`[DeepSeek] ❌ Failed to parse response as JSON.`);
+      console.error(`[DeepSeek] ${tag}❌ Failed to parse response as JSON.`);
       console.error(JSON.stringify({
         timestamp: new Date().toISOString(),
         level: 'error',
@@ -1401,7 +1488,6 @@ async function callDeepseek(prompt) {
         contentPreview: textPreview(content, 4000),
         parseError: errorDetail(markdownParseError),
       }));
-      
       const error = new Error('DeepSeek response was not valid JSON.');
       error.deepseekStatus = response.status;
       error.deepseekBody = parsedBody;
@@ -1417,8 +1503,49 @@ async function callDeepseek(prompt) {
   return { requestBody, responseBody: parsedBody, content: parsedContent };
 }
 
+async function callDeepseek(prompt, options = {}) {
+  const maxAttempts = Math.max(1, (options.retryMax ?? DEEPSEEK_RETRY_MAX) + 1);
+  const tag = options.tag ? `[${options.tag}] ` : '';
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await callDeepseekOnce(prompt, options);
+    } catch (error) {
+      lastError = error;
+      const status = error?.deepseekStatus;
+      const retriable = status === 429 || (typeof status === 'number' && status >= 500 && status < 600);
+      if (!retriable || attempt === maxAttempts) throw error;
+      const backoffMs = Math.min(60000, 2000 * Math.pow(2, attempt - 1));
+      console.warn(`[DeepSeek] ${tag}⚠️  Retriable error (status=${status}) on attempt ${attempt}/${maxAttempts}. Backing off ${backoffMs}ms.`);
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
+    }
+  }
+  throw lastError;
+}
+
+function pLimit(concurrency) {
+  const max = Math.max(1, concurrency);
+  let active = 0;
+  const queue = [];
+  const drain = () => {
+    if (active >= max || queue.length === 0) return;
+    const job = queue.shift();
+    active++;
+    Promise.resolve()
+      .then(job.fn)
+      .then(
+        (value) => { active--; job.resolve(value); drain(); },
+        (error) => { active--; job.reject(error); drain(); },
+      );
+  };
+  return (fn) => new Promise((resolve, reject) => {
+    queue.push({ fn, resolve, reject });
+    drain();
+  });
+}
+
 async function processStudySession({ uploadId, userId, selectedSpeaker, transcriptText, lemonfoxResponse, logTag = {} }) {
-  const friendlyTranscript = buildFriendlyTranscriptText(lemonfoxResponse) || transcriptText || '';
+  const segments = Array.isArray(lemonfoxResponse?.segments) ? lemonfoxResponse.segments : [];
   const studyRow = statements.upsertStudySession.get(
     uploadId,
     userId,
@@ -1431,9 +1558,9 @@ async function processStudySession({ uploadId, userId, selectedSpeaker, transcri
     return;
   }
 
-  let prompt;
+  let partition;
   try {
-    prompt = buildDeepseekPrompt(friendlyTranscript, selectedSpeaker);
+    partition = partitionTargetUtterances(segments, selectedSpeaker, DEEPSEEK_CHUNK_SIZE, DEEPSEEK_CHUNK_OVERLAP);
   } catch (error) {
     statements.markStudySessionError.run(error.message || String(error), studyId);
     statements.setUploadStudyStatus.run('study_failed', uploadId);
@@ -1443,92 +1570,181 @@ async function processStudySession({ uploadId, userId, selectedSpeaker, transcri
     return;
   }
 
+  if (!partition.chunks.length) {
+    statements.markStudySessionError.run(
+      'No utterances were found for the selected speaker in the transcript.',
+      studyId
+    );
+    statements.setUploadStudyStatus.run('study_failed', uploadId);
+    logLine('error', 'study_no_target_utterances', { uploadId, studyId, ...logTag });
+    return;
+  }
+
+  // Reset any previous run's sentences and counters before streaming new ones in.
+  statements.deleteStudySentencesForSession.run(studyId);
+
   logLine('info', 'deepseek_submit_started', {
-    uploadId, studyId, model: DEEPSEEK_MODEL, promptBytes: Buffer.byteLength(prompt), ...logTag,
+    uploadId, studyId, model: DEEPSEEK_MODEL,
+    chunkCount: partition.chunks.length,
+    targetUtteranceCount: partition.targetIndices.length,
+    chunkSize: DEEPSEEK_CHUNK_SIZE,
+    chunkOverlap: DEEPSEEK_CHUNK_OVERLAP,
+    concurrency: DEEPSEEK_CONCURRENCY,
+    thinking: DEEPSEEK_THINKING,
+    ...logTag,
   });
 
-  let result;
-  try {
-    result = await callDeepseek(prompt);
-  } catch (error) {
-    const message = error.message || 'DeepSeek call failed.';
-    const responseRecord = deepseekErrorRecord(error);
+  const limit = pLimit(DEEPSEEK_CONCURRENCY);
+  const chunkRecords = [];
+  let firstSuccessFlipped = false;
+  let firstChunkPrompt = null;
+
+  const handleChunk = async (chunk) => {
+    const tag = `chunk ${chunk.chunkIndex + 1}/${partition.chunks.length}`;
+    let prompt;
+    try {
+      prompt = buildChunkPrompt(segments, selectedSpeaker, chunk);
+    } catch (error) {
+      return { chunk, error, prompt: null, requestBody: null, responseBody: null, normalized: [] };
+    }
+    if (chunk.chunkIndex === 0) firstChunkPrompt = prompt;
+
+    let result;
+    try {
+      result = await callDeepseek(prompt, {
+        tag,
+        thinking: DEEPSEEK_THINKING,
+        reasoningEffort: DEEPSEEK_REASONING_EFFORT,
+        maxTokens: DEEPSEEK_CHUNK_MAX_TOKENS,
+      });
+    } catch (error) {
+      logLine('error', 'deepseek_chunk_failed', {
+        uploadId, studyId, chunkIndex: chunk.chunkIndex,
+        error: errorDetail(error),
+        deepseekStatus: error.deepseekStatus || null,
+        finishReason: error.deepseekFinishReason || null,
+        ...logTag,
+      });
+      return { chunk, error, prompt, requestBody: error.deepseekRequestBody || null, responseBody: null, normalized: [] };
+    }
+
+    const sentencesRaw = extractSentencesArray(result.content);
+    const normalized = (Array.isArray(sentencesRaw) ? sentencesRaw : [])
+      .map((item, idx) => normalizeStudySentence(item, idx))
+      .filter(Boolean);
+
+    if (normalized.length) {
+      const positionBase = chunk.chunkIndex * 1000;
+      db.exec('BEGIN');
+      try {
+        for (let i = 0; i < normalized.length; i++) {
+          const item = normalized[i];
+          statements.insertStudySentence.run(
+            studyId,
+            positionBase + i,
+            item.original_sentence,
+            item.grade,
+            item.slightly_corrected_sentence,
+            item.native_speaker_version,
+            item.explanation
+          );
+        }
+        statements.bumpStudyChunkProgress.run(normalized.length, normalized.length, studyId);
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        logLine('error', 'study_chunk_save_failed', {
+          uploadId, studyId, chunkIndex: chunk.chunkIndex, error: errorDetail(error), ...logTag,
+        });
+        return { chunk, error, prompt, requestBody: result.requestBody, responseBody: result.responseBody, normalized: [] };
+      }
+
+      if (!firstSuccessFlipped) {
+        firstSuccessFlipped = true;
+        statements.setUploadStudyStatus.run('study_ready', uploadId);
+        logLine('info', 'study_session_first_chunk_ready', {
+          uploadId, studyId, chunkIndex: chunk.chunkIndex, sentenceCount: normalized.length, ...logTag,
+        });
+      }
+    }
+
+    return { chunk, error: null, prompt, requestBody: result.requestBody, responseBody: result.responseBody, normalized };
+  };
+
+  const settled = await Promise.all(
+    partition.chunks.map((chunk) => limit(() => handleChunk(chunk)))
+  );
+
+  for (const record of settled) {
+    chunkRecords.push({
+      chunkIndex: record.chunk.chunkIndex,
+      coreCount: record.chunk.coreTargetIndices.length,
+      sentenceCount: record.normalized.length,
+      error: record.error ? (record.error.message || String(record.error)) : null,
+      finishReason: record.error?.deepseekFinishReason || null,
+      status: record.error ? 'failed' : 'ok',
+    });
+  }
+
+  const totalSentences = settled.reduce((sum, r) => sum + r.normalized.length, 0);
+  const failedChunks = settled.filter(r => r.error);
+  const requestSummary = settled
+    .filter(r => r.requestBody)
+    .map(r => ({
+      chunkIndex: r.chunk.chunkIndex,
+      promptBytes: r.prompt ? Buffer.byteLength(r.prompt) : null,
+    }));
+  const responseSummary = settled
+    .filter(r => r.responseBody)
+    .map(r => ({
+      chunkIndex: r.chunk.chunkIndex,
+      usage: r.responseBody?.usage || null,
+      finishReason: r.responseBody?.choices?.[0]?.finish_reason || null,
+    }));
+
+  if (totalSentences === 0) {
+    const firstError = failedChunks[0]?.error;
+    const message = firstError?.message || 'DeepSeek did not return any sentences across all chunks.';
     statements.markStudySessionDeepseekError.run(
       message,
-      prompt,
-      error.deepseekRequestBody ? safeJsonStringify(error.deepseekRequestBody) : null,
-      safeJsonStringify(responseRecord),
+      firstChunkPrompt,
+      safeJsonStringify({ chunks: requestSummary }),
+      safeJsonStringify({ chunks: responseSummary, errors: chunkRecords.filter(c => c.status === 'failed') }),
       studyId
     );
-    statements.setUploadStudyStatus.run('study_failed', uploadId);
-    logLine('error', 'deepseek_submit_failed', {
-      uploadId, studyId, error: errorDetail(error),
-      deepseekStatus: error.deepseekStatus || null,
-      finishReason: error.deepseekFinishReason || null,
-      contentBytes: responseRecord.contentBytes,
-      contentPreview: responseRecord.contentPreview ? textPreview(responseRecord.contentPreview, 2000) : null,
-      parseError: responseRecord.parseError,
-      ...logTag,
-    });
-    return;
-  }
-
-  const sentencesRaw = extractSentencesArray(result.content);
-  if (!Array.isArray(sentencesRaw) || !sentencesRaw.length) {
-    statements.markStudySessionError.run('DeepSeek did not return any sentences.', studyId);
     statements.setUploadStudyStatus.run('study_failed', uploadId);
     logLine('error', 'deepseek_no_sentences', {
-      uploadId, studyId, contentKeys: result.content && typeof result.content === 'object' ? Object.keys(result.content) : null,
-      ...logTag,
+      uploadId, studyId, failedChunkCount: failedChunks.length, ...logTag,
     });
     return;
   }
 
-  const normalized = sentencesRaw
-    .map((item, idx) => normalizeStudySentence(item, idx))
-    .filter(Boolean);
+  const finalStatus = failedChunks.length === 0 ? 'ready' : 'ready';
+  const errorNote = failedChunks.length
+    ? `${failedChunks.length} of ${partition.chunks.length} chunks failed: ${failedChunks
+        .map(r => r.error?.message || 'unknown error')
+        .slice(0, 3)
+        .join('; ')}`
+    : null;
 
-  if (!normalized.length) {
-    statements.markStudySessionError.run('DeepSeek sentences were empty after normalization.', studyId);
-    statements.setUploadStudyStatus.run('study_failed', uploadId);
-    return;
-  }
-
-  db.exec('BEGIN');
-  try {
-    statements.deleteStudySentencesForSession.run(studyId);
-    for (const item of normalized) {
-      statements.insertStudySentence.run(
-        studyId,
-        item.position,
-        item.original_sentence,
-        item.grade,
-        item.slightly_corrected_sentence,
-        item.native_speaker_version,
-        item.explanation
-      );
-    }
-    statements.markStudySessionReady.run(
-      prompt,
-      JSON.stringify(result.requestBody),
-      JSON.stringify(result.responseBody),
-      normalized.length,
-      studyId
-    );
+  statements.finalizeStudySession.run(
+    finalStatus,
+    errorNote,
+    firstChunkPrompt,
+    safeJsonStringify({ chunks: requestSummary }),
+    safeJsonStringify({ chunks: responseSummary, perChunk: chunkRecords }),
+    studyId
+  );
+  if (!firstSuccessFlipped) {
     statements.setUploadStudyStatus.run('study_ready', uploadId);
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    statements.markStudySessionError.run(error.message || 'Failed to save study sentences.', studyId);
-    statements.setUploadStudyStatus.run('study_failed', uploadId);
-    logLine('error', 'study_session_save_failed', {
-      uploadId, studyId, error: errorDetail(error), ...logTag,
-    });
-    return;
   }
 
   logLine('info', 'study_session_ready', {
-    uploadId, studyId, sentenceCount: normalized.length, ...logTag,
+    uploadId, studyId,
+    sentenceCount: totalSentences,
+    chunkCount: partition.chunks.length,
+    failedChunkCount: failedChunks.length,
+    ...logTag,
   });
 }
 
