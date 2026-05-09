@@ -53,6 +53,11 @@ const DEEPSEEK_THINKING = ['enabled', 'disabled'].includes(String(process.env.DE
 const DEEPSEEK_REASONING_EFFORT = ['high', 'max'].includes(String(process.env.DEEPSEEK_REASONING_EFFORT || '').toLowerCase())
   ? String(process.env.DEEPSEEK_REASONING_EFFORT).toLowerCase()
   : 'high';
+const AZURE_SPEECH_KEY = process.env.AZURE_SPEECH_KEY || '';
+const AZURE_SPEECH_REGION = process.env.AZURE_SPEECH_REGION || 'japaneast';
+const AZURE_PRONUNCIATION_LANGUAGE = process.env.AZURE_PRONUNCIATION_LANGUAGE || 'ja-JP';
+const PRONUNCIATION_AUDIO_ROOT = path.join(__dirname, 'uploads', 'pronunciation');
+const MAX_PRONUNCIATION_BYTES = Number(process.env.MAX_PRONUNCIATION_BYTES || 8 * 1024 * 1024);
 const PROMPT_TEMPLATE_PATH = path.join(__dirname, 'prompt.txt');
 let promptTemplate = '';
 try {
@@ -161,6 +166,29 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS native_audio_user_id_idx ON native_audio(user_id);
   CREATE INDEX IF NOT EXISTS native_audio_sentence_id_idx ON native_audio(study_sentence_id);
+
+  CREATE TABLE IF NOT EXISTS pronunciation_assessments (
+    id INTEGER PRIMARY KEY,
+    study_sentence_id INTEGER NOT NULL UNIQUE REFERENCES study_sentences(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reference_text TEXT NOT NULL,
+    stored_filename TEXT NOT NULL,
+    storage_path TEXT NOT NULL UNIQUE,
+    mime_type TEXT NOT NULL DEFAULT 'audio/wav',
+    size_bytes INTEGER NOT NULL,
+    azure_response_json TEXT,
+    pron_score REAL,
+    accuracy_score REAL,
+    fluency_score REAL,
+    completeness_score REAL,
+    recognition_status TEXT,
+    display_text TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS pronunciation_assessments_user_id_idx ON pronunciation_assessments(user_id);
+  CREATE INDEX IF NOT EXISTS pronunciation_assessments_sentence_id_idx ON pronunciation_assessments(study_sentence_id);
 
   CREATE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions(token_hash);
   CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id);
@@ -488,6 +516,41 @@ const statements = {
   `),
   deleteNativeAudio: db.prepare(`
     DELETE FROM native_audio WHERE id = ?
+  `),
+  getPronunciationAssessmentForSentence: db.prepare(`
+    SELECT id, study_sentence_id, user_id, reference_text, stored_filename, storage_path,
+           mime_type, size_bytes, azure_response_json, pron_score, accuracy_score,
+           fluency_score, completeness_score, recognition_status, display_text,
+           created_at, updated_at
+    FROM pronunciation_assessments
+    WHERE study_sentence_id = ? AND user_id = ?
+  `),
+  upsertPronunciationAssessment: db.prepare(`
+    INSERT INTO pronunciation_assessments (
+      study_sentence_id, user_id, reference_text, stored_filename, storage_path,
+      mime_type, size_bytes, azure_response_json, pron_score, accuracy_score,
+      fluency_score, completeness_score, recognition_status, display_text,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ON CONFLICT(study_sentence_id) DO UPDATE SET
+      user_id = excluded.user_id,
+      reference_text = excluded.reference_text,
+      stored_filename = excluded.stored_filename,
+      storage_path = excluded.storage_path,
+      mime_type = excluded.mime_type,
+      size_bytes = excluded.size_bytes,
+      azure_response_json = excluded.azure_response_json,
+      pron_score = excluded.pron_score,
+      accuracy_score = excluded.accuracy_score,
+      fluency_score = excluded.fluency_score,
+      completeness_score = excluded.completeness_score,
+      recognition_status = excluded.recognition_status,
+      display_text = excluded.display_text,
+      updated_at = datetime('now')
+    RETURNING id, study_sentence_id, user_id, reference_text, stored_filename, storage_path,
+              mime_type, size_bytes, azure_response_json, pron_score, accuracy_score,
+              fluency_score, completeness_score, recognition_status, display_text,
+              created_at, updated_at
   `),
 };
 
@@ -1751,6 +1814,119 @@ async function synthesizeNativeAudio({ text, userId, sentenceId, req }) {
   return { row, buffer, mime };
 }
 
+async function readRequestBodyToBuffer(req, limitBytes) {
+  const contentLength = Number(req.headers['content-length'] || 0);
+  if (contentLength && contentLength > limitBytes) {
+    const error = new Error('Audio file is too large.');
+    error.status = 413;
+    throw error;
+  }
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limitBytes) {
+      const error = new Error('Audio file is too large.');
+      error.status = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
+  if (size === 0) {
+    const error = new Error('Empty audio body.');
+    error.status = 400;
+    throw error;
+  }
+  return Buffer.concat(chunks);
+}
+
+function publicPronunciationAssessment(row) {
+  if (!row) return null;
+  let azureResponse = null;
+  if (row.azure_response_json) {
+    try { azureResponse = JSON.parse(row.azure_response_json); } catch {}
+  }
+  return {
+    id: row.id,
+    studySentenceId: row.study_sentence_id,
+    referenceText: row.reference_text,
+    mimeType: row.mime_type,
+    sizeBytes: row.size_bytes,
+    pronScore: row.pron_score,
+    accuracyScore: row.accuracy_score,
+    fluencyScore: row.fluency_score,
+    completenessScore: row.completeness_score,
+    recognitionStatus: row.recognition_status,
+    displayText: row.display_text,
+    azureResponse,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function callAzurePronunciationAssessment({ referenceText, audioBuffer, mimeType }) {
+  if (!AZURE_SPEECH_KEY) {
+    const error = new Error('Azure Speech API key is not configured on the server.');
+    error.status = 500;
+    throw error;
+  }
+  const params = {
+    ReferenceText: referenceText,
+    GradingSystem: 'HundredMark',
+    Granularity: 'Word',
+    Dimension: 'Comprehensive',
+    EnableMiscue: true,
+  };
+  const pronHeader = Buffer.from(JSON.stringify(params), 'utf8').toString('base64');
+  const url = `https://${AZURE_SPEECH_REGION}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=${encodeURIComponent(AZURE_PRONUNCIATION_LANGUAGE)}&format=detailed`;
+  const contentType = mimeType && mimeType.startsWith('audio/ogg')
+    ? 'audio/ogg; codecs=opus'
+    : 'audio/wav; codecs=audio/pcm; samplerate=16000';
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': AZURE_SPEECH_KEY,
+        'Content-Type': contentType,
+        Accept: 'application/json',
+        'Pronunciation-Assessment': pronHeader,
+      },
+      body: audioBuffer,
+    });
+  } catch (cause) {
+    const error = new Error('Unable to reach Azure Speech service.');
+    error.status = 502;
+    error.cause = cause;
+    throw error;
+  }
+
+  const text = await response.text();
+  let parsed = null;
+  try { parsed = JSON.parse(text); } catch {}
+
+  if (!response.ok) {
+    const error = new Error(
+      (parsed && (parsed.message || parsed.error)) ||
+      `Azure Speech request failed (${response.status}).`
+    );
+    error.status = response.status === 401 || response.status === 403 ? 502 : 502;
+    error.azureStatus = response.status;
+    error.azureBody = text.slice(0, 2000);
+    throw error;
+  }
+
+  if (!parsed) {
+    const error = new Error('Azure Speech returned an unparseable response.');
+    error.status = 502;
+    error.azureBody = text.slice(0, 2000);
+    throw error;
+  }
+
+  return parsed;
+}
+
 function sendNativeAudioBuffer(res, buffer, mimeType) {
   res.writeHead(200, {
     'Content-Type': mimeType || 'audio/wav',
@@ -1833,6 +2009,164 @@ async function handleAudio(req, res, url) {
         });
         return json(res, status, { error: error.message || 'Unable to synthesize native audio.' });
       }
+    }
+  }
+
+  {
+    const assessMatch = url.pathname.match(/^\/api\/audio\/study-sentences\/(\d+)\/pronunciation-assessment$/);
+    if (assessMatch) {
+      const sentenceId = Number(assessMatch[1]);
+
+      if (req.method === 'GET') {
+        const user = requireUser(req, res);
+        if (!user) return;
+        const sentenceRow = statements.getStudySentenceForUser.get(sentenceId, user.id);
+        if (!sentenceRow) return json(res, 404, { error: 'Sentence not found.' });
+        const row = statements.getPronunciationAssessmentForSentence.get(sentenceId, user.id);
+        return json(res, 200, { assessment: publicPronunciationAssessment(row) });
+      }
+
+      if (req.method === 'POST') {
+        if (!isSameOrigin(req)) {
+          markRequestLogError(req, 403, 'Invalid request origin.', { origin: req.headers.origin || null });
+          return json(res, 403, { error: 'Invalid request origin.' });
+        }
+        const user = requireUser(req, res);
+        if (!user) return;
+
+        const sentenceRow = statements.getStudySentenceForUser.get(sentenceId, user.id);
+        if (!sentenceRow) {
+          markRequestLogError(req, 404, 'Study sentence not found.', { sentenceId });
+          return json(res, 404, { error: 'Sentence not found.' });
+        }
+
+        const referenceText = String(
+          sentenceRow.native_speaker_version || sentenceRow.original_sentence || ''
+        ).trim();
+        if (!referenceText) {
+          return json(res, 400, { error: 'No reference text is available for this sentence.' });
+        }
+
+        const incomingType = String(req.headers['content-type'] || '').toLowerCase();
+        const isOgg = incomingType.includes('audio/ogg');
+        const audioBuffer = await readRequestBodyToBuffer(req, MAX_PRONUNCIATION_BYTES);
+
+        addRequestLogEvent(req, 'pronunciation_assessment_received', {
+          sentenceId,
+          sizeBytes: audioBuffer.length,
+          contentType: incomingType || null,
+        });
+
+        let azureResult;
+        try {
+          azureResult = await callAzurePronunciationAssessment({
+            referenceText,
+            audioBuffer,
+            mimeType: isOgg ? 'audio/ogg' : 'audio/wav',
+          });
+          {
+            const b = azureResult && Array.isArray(azureResult.NBest) ? azureResult.NBest[0] : null;
+            const p = b ? (b.PronunciationAssessment || b) : null;
+            addRequestLogEvent(req, 'pronunciation_azure_response', {
+              sentenceId,
+              recognitionStatus: azureResult && azureResult.RecognitionStatus,
+              displayText: azureResult && azureResult.DisplayText,
+              pronScore: p ? p.PronScore : null,
+            });
+          }
+        } catch (error) {
+          const status = error.status || 502;
+          logLine('error', 'pronunciation_azure_failed', {
+            sentenceId,
+            azureStatus: error.azureStatus || null,
+            azureBody: error.azureBody || null,
+            error: errorDetail(error),
+          });
+          markRequestLogError(req, status, error.message || 'Azure pronunciation assessment failed.', {
+            sentenceId,
+            azureStatus: error.azureStatus || null,
+            azureBody: error.azureBody || null,
+          });
+          return json(res, status, {
+            error: error.message || 'Pronunciation assessment failed.',
+            azureStatus: error.azureStatus || null,
+            azureBody: error.azureBody || null,
+          });
+        }
+
+        const dir = path.join(PRONUNCIATION_AUDIO_ROOT, String(user.id));
+        await fs.mkdir(dir, { recursive: true });
+        const ext = isOgg ? '.ogg' : '.wav';
+        const storedFilename = `${sentenceId}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
+        const storagePath = path.join(dir, storedFilename);
+        await fs.writeFile(storagePath, audioBuffer);
+
+        const existing = statements.getPronunciationAssessmentForSentence.get(sentenceId, user.id);
+        if (existing && existing.storage_path && existing.storage_path !== storagePath) {
+          fs.unlink(existing.storage_path).catch(() => {});
+        }
+
+        const best = Array.isArray(azureResult.NBest) && azureResult.NBest.length ? azureResult.NBest[0] : null;
+        const pron = best ? (best.PronunciationAssessment || best) : null;
+        const recognitionStatus = String(azureResult.RecognitionStatus || '');
+        const displayText = String(azureResult.DisplayText || (best && best.Display) || '');
+        const mimeType = isOgg ? 'audio/ogg' : 'audio/wav';
+        const numOrNull = (v) => {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        };
+
+        const row = statements.upsertPronunciationAssessment.get(
+          sentenceId,
+          user.id,
+          referenceText,
+          storedFilename,
+          storagePath,
+          mimeType,
+          audioBuffer.length,
+          JSON.stringify(azureResult),
+          pron ? numOrNull(pron.PronScore) : null,
+          pron ? numOrNull(pron.AccuracyScore) : null,
+          pron ? numOrNull(pron.FluencyScore) : null,
+          pron ? numOrNull(pron.CompletenessScore) : null,
+          recognitionStatus || null,
+          displayText || null
+        );
+
+        addRequestLogEvent(req, 'pronunciation_assessment_saved', {
+          sentenceId,
+          recognitionStatus,
+          pronScore: pron ? pron.PronScore : null,
+        });
+
+        return json(res, 200, { assessment: publicPronunciationAssessment(row) });
+      }
+    }
+
+    const recordingMatch = url.pathname.match(/^\/api\/audio\/study-sentences\/(\d+)\/user-recording$/);
+    if (recordingMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const sentenceId = Number(recordingMatch[1]);
+      const row = statements.getPronunciationAssessmentForSentence.get(sentenceId, user.id);
+      if (!row) {
+        return text(res, 404, 'Not Found\n');
+      }
+      let buffer;
+      try {
+        buffer = await fs.readFile(row.storage_path);
+      } catch {
+        return text(res, 404, 'Not Found\n');
+      }
+      res.writeHead(200, {
+        'Content-Type': row.mime_type || 'audio/wav',
+        'Content-Length': buffer.length,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Accept-Ranges': 'none',
+      });
+      if (req.method === 'HEAD') return res.end();
+      return res.end(buffer);
     }
   }
 
