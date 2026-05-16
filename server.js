@@ -352,10 +352,15 @@ const statements = {
       a.id, a.title, a.original_filename, a.mime_type, a.size_bytes, a.status,
       a.selected_speaker, a.lemonfox_error, a.created_at, a.updated_at,
       a.submitted_at, a.completed_at,
+      s.id AS study_id,
       s.status AS study_status, s.error AS study_error,
       s.sentence_count AS study_sentence_count,
       s.completed_count AS study_completed_count,
-      s.current_index AS study_current_index
+      s.current_index AS study_current_index,
+      (SELECT AVG(pa.pron_score)
+         FROM pronunciation_assessments pa
+         JOIN study_sentences ssx ON pa.study_sentence_id = ssx.id
+        WHERE ssx.study_session_id = s.id AND pa.pron_score IS NOT NULL) AS study_avg_pron_score
     FROM audio_uploads a
     LEFT JOIN study_sessions s ON s.audio_upload_id = a.id
     WHERE a.user_id = ?
@@ -467,11 +472,26 @@ const statements = {
     WHERE audio_upload_id = ? AND user_id = ?
   `),
   getStudySentencesForSession: db.prepare(`
-    SELECT id, position, original_sentence, grade, slightly_corrected_sentence,
-           native_speaker_version, explanation, done
-    FROM study_sentences
-    WHERE study_session_id = ?
-    ORDER BY position ASC
+    SELECT ss.id, ss.position, ss.original_sentence, ss.grade,
+           ss.slightly_corrected_sentence, ss.native_speaker_version,
+           ss.explanation, ss.done,
+           pa.pron_score AS pron_score
+    FROM study_sentences ss
+    LEFT JOIN pronunciation_assessments pa ON pa.study_sentence_id = ss.id
+    WHERE ss.study_session_id = ?
+    ORDER BY ss.position ASC
+  `),
+  getStudySessionAvgScore: db.prepare(`
+    SELECT AVG(pa.pron_score) AS avg_pron_score
+    FROM pronunciation_assessments pa
+    JOIN study_sentences ss ON pa.study_sentence_id = ss.id
+    WHERE ss.study_session_id = ? AND pa.pron_score IS NOT NULL
+  `),
+  updateAudioUploadTitle: db.prepare(`
+    UPDATE audio_uploads
+    SET title = ?, updated_at = datetime('now')
+    WHERE id = ? AND user_id = ?
+    RETURNING id, title, original_filename, mime_type, size_bytes, status, selected_speaker, lemonfox_error, created_at, updated_at, submitted_at, completed_at
   `),
   updateStudyCurrentIndex: db.prepare(`
     UPDATE study_sessions
@@ -487,7 +507,7 @@ const statements = {
     UPDATE study_sessions
     SET completed_count = (
       SELECT COUNT(*) FROM study_sentences
-      WHERE study_session_id = study_sessions.id AND done = 1
+      WHERE study_session_id = study_sessions.id AND (done = 1 OR grade = 'correct')
     ),
     updated_at = datetime('now')
     WHERE id = ?
@@ -949,6 +969,7 @@ function publicAudioUpload(row) {
       sentenceCount: row.study_sentence_count || 0,
       completedCount: row.study_completed_count || 0,
       currentIndex: row.study_current_index || 0,
+      avgPronScore: row.study_avg_pron_score != null ? Number(row.study_avg_pron_score) : null,
     };
   }
   return payload;
@@ -1202,6 +1223,10 @@ async function handleAuth(req, res, url) {
 
 function publicStudySession(row, sentences = []) {
   if (!row) return null;
+  const scored = sentences
+    .map(s => (s.pron_score != null ? Number(s.pron_score) : null))
+    .filter(v => Number.isFinite(v));
+  const avgPronScore = scored.length ? scored.reduce((a, b) => a + b, 0) / scored.length : null;
   return {
     id: row.id,
     audioUploadId: row.audio_upload_id,
@@ -1212,6 +1237,7 @@ function publicStudySession(row, sentences = []) {
     sentenceCount: row.sentence_count || 0,
     currentIndex: row.current_index || 0,
     completedCount: row.completed_count || 0,
+    avgPronScore,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     completedAt: row.completed_at || null,
@@ -1224,6 +1250,7 @@ function publicStudySession(row, sentences = []) {
       nativeSpeakerVersion: s.native_speaker_version,
       explanation: s.explanation,
       done: !!s.done,
+      pronScore: s.pron_score != null ? Number(s.pron_score) : null,
     })),
   };
 }
@@ -1515,6 +1542,7 @@ async function processStudySession({ uploadId, userId, selectedSpeaker, transcri
       normalized.length,
       studyId
     );
+    statements.recountStudyCompleted.run(studyId);
     statements.setUploadStudyStatus.run('study_ready', uploadId);
     db.exec('COMMIT');
   } catch (error) {
@@ -2133,10 +2161,16 @@ async function handleAudio(req, res, url) {
           displayText || null
         );
 
+        const pronScoreNum = pron ? numOrNull(pron.PronScore) : null;
+        const shouldMarkDone = pronScoreNum != null && pronScoreNum >= 85 ? 1 : 0;
+        statements.setStudySentenceDone.run(shouldMarkDone, sentenceId, sentenceRow.study_session_id);
+        statements.recountStudyCompleted.run(sentenceRow.study_session_id);
+
         addRequestLogEvent(req, 'pronunciation_assessment_saved', {
           sentenceId,
           recognitionStatus,
           pronScore: pron ? pron.PronScore : null,
+          markedDone: !!shouldMarkDone,
         });
 
         return json(res, 200, { assessment: publicPronunciationAssessment(row) });
@@ -2224,7 +2258,7 @@ async function handleAudio(req, res, url) {
     });
     const fileToken = makeSecret();
     const callbackToken = makeSecret();
-    const title = originalFilename.replace(/\.[^.]+$/, '') || 'Audio session';
+    const title = originalFilename || 'Audio session';
 
     const upload = statements.createAudioUpload.get(
       user.id,
@@ -2309,6 +2343,29 @@ async function handleAudio(req, res, url) {
   }
 
   if (url.pathname.startsWith('/api/audio/uploads/') && req.method === 'POST') {
+    const titleUploadId = parseUploadChildPath(url.pathname, 'title');
+    if (titleUploadId !== null) {
+      if (!isSameOrigin(req)) {
+        markRequestLogError(req, 403, 'Invalid request origin.', { origin: req.headers.origin || null });
+        return json(res, 403, { error: 'Invalid request origin.' });
+      }
+      const user = requireUser(req, res);
+      if (!user) return;
+
+      const body = await readJson(req);
+      const rawTitle = String(body.title ?? '').replace(/\s+/g, ' ').trim();
+      if (!rawTitle) return json(res, 400, { error: 'Enter a session name.' });
+      if (rawTitle.length > 180) return json(res, 400, { error: 'Session name is too long.' });
+
+      const updated = statements.updateAudioUploadTitle.get(rawTitle, titleUploadId, user.id);
+      if (!updated) {
+        markRequestLogError(req, 404, 'Upload not found.', { uploadId: titleUploadId });
+        return text(res, 404, 'Not Found\n');
+      }
+      const refreshed = statements.getAudioUploadForUser.get(titleUploadId, user.id);
+      return json(res, 200, { upload: publicAudioUpload(refreshed || updated) });
+    }
+
     const speakerUploadId = parseUploadChildPath(url.pathname, 'speaker');
     if (speakerUploadId !== null) {
       if (!isSameOrigin(req)) {

@@ -101,6 +101,10 @@ const fetchStudySessionRequest = async (id) => apiRequest(`/api/audio/uploads/${
 
 const updateStudyProgressRequest = async (id, body) => apiRequest(`/api/audio/uploads/${id}/study/progress`, body);
 
+const renameUploadRequest = async (id, title) => apiRequest(`/api/audio/uploads/${id}/title`, { title });
+
+const PASS_SCORE = 85;
+
 const SESSION_ACTIVE_STATUSES = new Set(['uploaded', 'processing']);
 const SESSION_SPEAKER_STATUSES = new Set(['speaker_selection', 'completed']);
 const SESSION_STUDY_PROCESSING_STATUSES = new Set(['speaker_selected', 'study_processing']);
@@ -133,6 +137,7 @@ const drillSentenceFromStudy = (s) => ({
   expl_jp: s.explanation || '',
   expl_en: '',
   _done: !!s.done,
+  pronScore: Number.isFinite(s.pronScore) ? s.pronScore : null,
 });
 
 const formatSessionDate = (value) => {
@@ -261,7 +266,7 @@ const C = {
   blueBg:    'rgba(44,92,245,0.08)',
   green:     '#2a7a42',
   greenBg:   'rgba(42,122,66,0.09)',
-  greenLight:'rgba(42,122,66,0.18)',
+  greenLight:'#7fb88e',
   amber:     '#b07020',
   amberBg:   'rgba(176,112,32,0.09)',
   red:       '#c23b22',
@@ -712,12 +717,109 @@ const TopBar = ({ sentences, current, onJump }) => (
   </div>
 );
 
-// ── Shared BottomNav ──────────────────────────────────────────
-const BottomNav = ({ index, total, onNext, onPrev, canAdvance, isCorrect }) => {
-  const isLast = index === total-1;
-  const nextOk = isCorrect || canAdvance;
+// ── Back arrow icon ──────────────────────────────────────────
+const BackI = ({sz=18,col='currentColor'}) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>;
+
+// ── Session header (drill UI top) ─────────────────────────────
+const SessionHeader = ({ title, avgScore, hideCorrect, onToggleHideCorrect, onBack, onRename, hasCorrect }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title || '');
+  const inputRef = useRef(null);
+
+  useEffect(() => { setDraft(title || ''); }, [title]);
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.select(); }, [editing]);
+
+  const commit = () => {
+    const next = draft.trim();
+    setEditing(false);
+    if (!next || next === title) { setDraft(title || ''); return; }
+    onRename(next);
+  };
+  const cancel = () => { setDraft(title || ''); setEditing(false); };
+
+  const avgCol = avgScore == null ? C.ink3 : avgScore >= 80 ? C.green : avgScore >= 70 ? C.amber : C.red;
+
   return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 20px', borderTop:`1px solid ${C.border}`, background:C.paper, flexShrink:0 }}>
+    <div style={{
+      display:'flex', alignItems:'center', gap:12, padding:'10px 20px',
+      borderBottom:`1px solid ${C.border}`, background:C.bg, flexShrink:0,
+    }}>
+      <button onClick={onBack} title="Back to sessions" style={{
+        display:'flex', alignItems:'center', gap:5, background:'none',
+        border:`1px solid ${C.border2}`, borderRadius:8, padding:'6px 12px',
+        cursor:'pointer', color:C.ink2, fontSize:12,
+      }}><BackI sz={14} col={C.ink2}/> Sessions</button>
+
+      <div style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:8 }}>
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); }}
+            style={{
+              flex:1, fontSize:14, fontWeight:600, color:C.ink,
+              background:C.paper, border:`1px solid ${C.blue}`, borderRadius:6,
+              padding:'5px 10px', outline:'none', fontFamily:"'DM Sans',sans-serif",
+              minWidth:0,
+            }}
+          />
+        ) : (
+          <div
+            onDoubleClick={() => setEditing(true)}
+            title="Double-click to rename"
+            style={{
+              flex:1, fontSize:14, fontWeight:600, color:C.ink,
+              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+              padding:'5px 10px', borderRadius:6,
+              cursor:'text', border:'1px solid transparent',
+            }}
+          >{title || 'Untitled session'}</div>
+        )}
+        {avgScore != null && (
+          <div title="Average pronunciation score across practiced sentences" style={{
+            display:'flex', alignItems:'center', gap:5,
+            padding:'4px 10px', borderRadius:100,
+            background:C.bg2, color:avgCol,
+            fontSize:11, fontWeight:600, fontFamily:"'DM Mono',monospace",
+            flexShrink:0, whiteSpace:'nowrap',
+          }}>
+            <span style={{ color:C.ink3, fontWeight:500 }}>avg</span>
+            {Math.round(avgScore)}
+          </div>
+        )}
+      </div>
+
+      {hasCorrect && (
+        <button
+          onClick={onToggleHideCorrect}
+          title={hideCorrect ? 'Show correct sentences in drill' : 'Hide correct sentences (focus on mistakes)'}
+          style={{
+            display:'flex', alignItems:'center', gap:6,
+            padding:'6px 12px', borderRadius:8,
+            background: hideCorrect ? C.ink : C.paper,
+            color: hideCorrect ? C.bg : C.ink2,
+            border:`1px solid ${hideCorrect ? C.ink : C.border2}`,
+            cursor:'pointer', fontSize:11, fontWeight:600,
+            whiteSpace:'nowrap', transition:'all 0.15s',
+          }}
+        >
+          {hideCorrect ? 'showing only mistakes' : 'hide correct'}
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ── Shared BottomNav ──────────────────────────────────────────
+const BottomNav = ({ index, total, onNext, onPrev, isLastVisible }) => {
+  return (
+    <div style={{
+      display:'flex', alignItems:'center', justifyContent:'space-between',
+      padding:'12px 20px', borderTop:`1px solid ${C.border2}`,
+      background:C.bg2, flexShrink:0,
+    }}>
       <button onClick={onPrev} disabled={index===0} style={{
         display:'flex', alignItems:'center', gap:6, background:'none',
         border:`1px solid ${C.border2}`, borderRadius:8, padding:'9px 16px',
@@ -725,50 +827,50 @@ const BottomNav = ({ index, total, onNext, onPrev, canAdvance, isCorrect }) => {
         opacity:index===0?0.3:1, transition:'opacity 0.15s',
       }}><ArrL sz={15} col={C.ink2}/> Prev</button>
 
-      {isLast && nextOk ? (
+      <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:C.ink3, opacity:0.7 }}>
+        {index+1} / {total}
+      </div>
+
+      {isLastVisible ? (
         <button onClick={onNext} style={{
           display:'flex', alignItems:'center', gap:6, background:C.green, color:'#fff',
           border:'none', borderRadius:8, padding:'9px 20px', cursor:'pointer',
           fontSize:13, fontWeight:600,
         }}>Finish <ChkI sz={13} col="#fff"/></button>
       ) : (
-        <button onClick={nextOk ? onNext : undefined} style={{
+        <button onClick={onNext} style={{
           display:'flex', alignItems:'center', gap:6,
-          background: nextOk ? C.ink : 'transparent',
-          color: nextOk ? C.bg : C.border2,
-          border:`1px solid ${nextOk ? C.ink : C.border2}`,
+          background: C.ink, color: C.bg,
+          border:`1px solid ${C.ink}`,
           borderRadius:8, padding:'9px 20px',
-          cursor:nextOk?'pointer':'default',
+          cursor:'pointer',
           fontSize:13, fontWeight:600,
-          opacity:nextOk?1:0.4, transition:'all 0.2s',
-        }}>Next <ArrR sz={15} col={nextOk?C.bg:C.border2}/></button>
+          transition:'all 0.2s',
+        }}>Next <ArrR sz={15} col={C.bg}/></button>
       )}
     </div>
   );
 };
 
 // ── CORRECT CARD ──────────────────────────────────────────────
-const CorrectCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, sentences }) => {
-  const [playOwn, setPlayOwn] = useState(false);
+const CorrectCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, sentences, isLastVisible }) => {
   const animClass = direction==='right'?'enter-right':direction==='left'?'enter-left':'enter-up';
-
-  const handlePlay = () => { setPlayOwn(true); setTimeout(()=>setPlayOwn(false), 2200); };
 
   return (
     <div className={animClass} style={{ height:'100%', display:'flex', flexDirection:'column', background:C.bg }}>
       <TopBar sentences={sentences} current={index} onJump={onJump}/>
 
-      {/* Content — top-left aligned, same layout as FocusCard */}
+      {/* Content — same padding as FocusCard for smooth transitions */}
       <div style={{ flex:1, overflowY:'auto', padding:'16px clamp(20px,6vw,100px) 28px', display:'flex', flexDirection:'column', gap:24 }}>
 
         {/* Tag chip */}
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
           <span style={{
             padding:'3px 12px', borderRadius:100,
             background:C.greenBg, color:C.green,
             fontSize:12, fontWeight:600,
           }}>✓ correct</span>
-          <span style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sentence.start}</span>
+          {sentence.start && <span style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sentence.start}</span>}
         </div>
 
         {/* What you said — header matches FocusCard */}
@@ -780,22 +882,6 @@ const CorrectCard = ({ sentence, index, total, direction, onNext, onPrev, onJump
             <div style={{ fontSize:'clamp(22px,4vw,38px)', fontFamily:"'Noto Serif JP',serif", color:C.ink, lineHeight:1.85, fontWeight:400 }}>
               {sentence.original}
             </div>
-            {/* Play icon + duration inline */}
-            <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-              <button
-                onClick={handlePlay}
-                title="Play your clip"
-                style={{
-                  width:34, height:34, borderRadius:'50%', border:`1px solid ${C.border2}`,
-                  background: playOwn ? C.greenBg : C.paper,
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  cursor:'pointer', transition:'all 0.15s', flexShrink:0,
-                }}
-              >
-                {playOwn ? <Waveform active size="sm" color={C.green}/> : <PlayI sz={13} col={C.ink3}/>}
-              </button>
-              <span style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sentence.dur}</span>
-            </div>
           </div>
           <div style={{ marginTop:12, fontSize:14, color:C.ink3, lineHeight:1.7, maxWidth:480 }}>
             This sentence was natural and correct. Keep it up — your instincts are improving.
@@ -803,7 +889,7 @@ const CorrectCard = ({ sentence, index, total, direction, onNext, onPrev, onJump
         </div>
       </div>
 
-      <BottomNav index={index} total={total} onNext={onNext} onPrev={onPrev} canAdvance={false} isCorrect={true}/>
+      <BottomNav index={index} total={total} onNext={onNext} onPrev={onPrev} isLastVisible={isLastVisible}/>
     </div>
   );
 };
@@ -911,8 +997,7 @@ const recordedBlobToWav = async (blob) => {
 };
 
 // ── FOCUS CARD (needs improvement) ───────────────────────────
-const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, sentences }) => {
-  const [showCorrections, setShowCorrections] = useState(false);
+const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, sentences, isLastVisible, showCorrections, onShowCorrections, onAssessmentUpdate }) => {
   const [recording, setRec]   = useState(false);
   const [recSecs, setRecSecs] = useState(0);
   const [assessing, setAssessing] = useState(false);
@@ -937,7 +1022,7 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
 
   const score = assessment && Number.isFinite(assessment.pronScore) ? Math.round(assessment.pronScore) : null;
   const scored = score !== null;
-  const canAdvance = scored && score >= 80;
+  const isComplete = scored && score >= PASS_SCORE;
 
   const stopUserAudioPlayback = () => {
     if (ownAudioRef.current) {
@@ -986,6 +1071,10 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
         const data = await res.json().catch(() => ({}));
         if (cancelled || !data || !data.assessment) return;
         setAssessment(data.assessment);
+        if (Number.isFinite(data.assessment.pronScore)) {
+          onShowCorrections?.();
+          onAssessmentUpdate?.(sentence.studyId, data.assessment.pronScore);
+        }
       } catch {}
     })();
     return () => { cancelled = true; };
@@ -1031,6 +1120,9 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
         throw new Error('Server returned no assessment payload.');
       }
       setAssessment(data.assessment);
+      if (Number.isFinite(data.assessment.pronScore)) {
+        onAssessmentUpdate?.(sentence.studyId, data.assessment.pronScore);
+      }
       if (userAudioUrl) {
         try { URL.revokeObjectURL(userAudioUrl); } catch {}
       }
@@ -1238,12 +1330,20 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
     <div key={sentence.id} className={animClass} style={{ height:'100%', display:'flex', flexDirection:'column', background:C.bg, overflow:'hidden' }}>
       <TopBar sentences={sentences} current={index} onJump={onJump}/>
 
-      <div style={{ flex:1, overflowY:'auto', padding:'4px clamp(20px,6vw,100px) 28px', display:'flex', flexDirection:'column', gap:24 }}>
+      <div style={{ flex:1, overflowY:'auto', padding:'16px clamp(20px,6vw,100px) 28px', display:'flex', flexDirection:'column', gap:24 }}>
 
-        {/* Tag + timestamp */}
+        {/* Tag + timestamp + complete badge */}
         <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
           <span style={{ padding:'3px 12px', borderRadius:100, background:tag.bg, color:tag.color, fontSize:12, fontWeight:600 }}>{tag.label}</span>
-          <span style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sentence.start}</span>
+          {isComplete && (
+            <span style={{
+              display:'inline-flex', alignItems:'center', gap:4,
+              padding:'3px 12px', borderRadius:100,
+              background:C.greenBg, color:C.green,
+              fontSize:12, fontWeight:600,
+            }}><ChkI sz={11} col={C.green}/> complete · {score}</span>
+          )}
+          {sentence.start && <span style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sentence.start}</span>}
         </div>
 
         {/* What you said */}
@@ -1286,9 +1386,9 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
           </div>
         </div>
 
-        {/* Show corrections button */}
+        {/* Show corrections button — once revealed, stays open across cards */}
         {!showCorrections && (
-          <button onClick={()=>setShowCorrections(true)} style={{
+          <button onClick={()=>onShowCorrections?.()} style={{
             alignSelf:'flex-start', padding:'12px 28px', background:C.ink, color:C.bg,
             border:'none', borderRadius:10, fontSize:14, fontWeight:600,
             cursor:'pointer', transition:'opacity 0.2s',
@@ -1396,11 +1496,11 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
                   <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:16, display:'flex', gap:18, flexWrap:'wrap', alignItems:'flex-start' }}>
                     <ScoreRing score={score}/>
                     <div style={{ flex:1, minWidth:200 }}>
-                      <div style={{ fontSize:14, fontWeight:600, color:score>=80?C.green:score>=70?C.amber:C.red, marginBottom:4 }}>
-                        {score>=90?'Native-level':score>=80?'Great — moving on ✓':score>=70?'Getting closer — try again':'Keep going — you\'ll get it'}
+                      <div style={{ fontSize:14, fontWeight:600, color:score>=PASS_SCORE?C.green:score>=70?C.amber:C.red, marginBottom:4 }}>
+                        {score>=90?'Native-level':score>=PASS_SCORE?'Great — this card is complete ✓':score>=70?'Getting closer — try again':'Keep going — you\'ll get it'}
                       </div>
                       <div style={{ fontSize:12, color:C.ink3, marginBottom:12, lineHeight:1.6 }}>
-                        {score>=80?'Score 80+ achieved — this card is done.':'Score 80+ to mark this done and move on.'}
+                        {score>=PASS_SCORE?`Score ${PASS_SCORE}+ achieved — this card counts as done.`:`Reach a score of ${PASS_SCORE} or higher to mark this card complete.`}
                       </div>
 
                       {recognitionMessage && (
@@ -1511,7 +1611,7 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
         )}
       </div>
 
-      <BottomNav index={index} total={total} onNext={onNext} onPrev={onPrev} canAdvance={canAdvance} isCorrect={false}/>
+      <BottomNav index={index} total={total} onNext={onNext} onPrev={onPrev} isLastVisible={isLastVisible}/>
     </div>
   );
 };
@@ -1529,6 +1629,9 @@ const SessionCard = ({ session, onResume }) => {
   const studyProgressPct = studyReady && studyInfo.sentenceCount
     ? Math.round((studyInfo.completedCount / studyInfo.sentenceCount) * 100)
     : 0;
+  const isStudyComplete = studyReady && studyInfo.sentenceCount > 0 && studyProgressPct >= 100;
+  const hasProgress = studyReady && ((studyInfo.completedCount || 0) > 0 || (studyInfo.currentIndex || 0) > 0);
+  const avgPron = Number.isFinite(studyInfo.avgPronScore) ? Math.round(studyInfo.avgPronScore) : null;
   const status = failed
     ? { label:'Transcription failed', detail:session.error || 'Open the logs for Lemonfox details.', color:C.red, bg:C.redBg }
     : studyFailed
@@ -1539,8 +1642,12 @@ const SessionCard = ({ session, onResume }) => {
           ? { label:'Select speaker', detail:'Transcript is ready. Choose which speaker is you.', color:C.amber, bg:C.amberBg }
           : studyProcessing
             ? { label:'Analyzing speech', detail:`Analyzing ${speakerLabel(session.selectedSpeaker)}'s sentences. This can take a minute.`, color:C.blue, bg:C.blueBg }
+          : studyReady && isStudyComplete
+            ? { label:'Complete', detail:`All ${studyInfo.sentenceCount} sentences done. Open to review.`, color:C.green, bg:C.greenBg }
+          : studyReady && hasProgress
+            ? { label:'In progress', detail:`${studyInfo.completedCount || 0} of ${studyInfo.sentenceCount || 0} sentences complete`, color:C.blue, bg:C.blueBg }
           : studyReady
-            ? { label:'Ready to drill', detail:`${studyInfo.sentenceCount || 0} sentences ready · ${studyInfo.completedCount || 0} done`, color:C.green, bg:C.greenBg }
+            ? { label:'Ready to drill', detail:`${studyInfo.sentenceCount || 0} sentences ready to practice`, color:C.green, bg:C.greenBg }
           : { label:'Audio uploaded', detail:'Waiting to begin transcription.', color:C.amber, bg:C.amberBg };
 
   return (
@@ -1621,11 +1728,23 @@ const SessionCard = ({ session, onResume }) => {
       ) : studyReady ? (
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           <div style={{ height:4, borderRadius:2, background:C.border2, overflow:'hidden' }}>
-            <div style={{ height:'100%', width:`${studyProgressPct}%`, background:C.green, transition:'width 0.3s' }}/>
+            <div style={{ height:'100%', width:`${studyProgressPct}%`, background:isStudyComplete?C.green:C.blue, transition:'width 0.3s' }}/>
           </div>
           <div style={{ display:'flex', gap:14, fontSize:12, flexWrap:'wrap', alignItems:'center' }}>
-            <span style={{ color:C.ink3 }}><b style={{ color:C.green, fontFamily:"'DM Mono',monospace" }}>{studyProgressPct}%</b></span>
-            <span style={{ color:C.ink3 }}>Click to {studyInfo.completedCount > 0 ? 'continue' : 'start'} drilling your sentences.</span>
+            <span style={{ color:C.ink3 }}><b style={{ color:isStudyComplete?C.green:C.blue, fontFamily:"'DM Mono',monospace" }}>{studyProgressPct}%</b></span>
+            {avgPron != null && (
+              <span style={{ color:C.ink3, display:'inline-flex', alignItems:'center', gap:5 }}>
+                avg score
+                <b style={{ fontFamily:"'DM Mono',monospace", color: avgPron >= 80 ? C.green : avgPron >= 70 ? C.amber : C.red }}>{avgPron}</b>
+              </span>
+            )}
+            <span style={{ color:C.ink3 }}>
+              {isStudyComplete
+                ? 'Click to review.'
+                : hasProgress
+                  ? 'Click to continue drilling.'
+                  : 'Click to start drilling your sentences.'}
+            </span>
           </div>
         </div>
       ) : (
@@ -1998,15 +2117,18 @@ const HomeScreen = ({ sessions, onUpload, onResume, user, onSignIn, onSignUp, on
 };
 
 // ── Summary screen ────────────────────────────────────────────
-const SummaryScreen = ({ sentences, onDone }) => {
+const SummaryScreen = ({ sentences, sessionTitle, onDone }) => {
   const correct   = sentences.filter(s => s.correct).length;
   const total     = sentences.length;
-  const needsWork = total - correct;
-  const practiced = sentences.filter(s => !s.correct && s._done).length || needsWork; // in real app this tracks completed
-  const pctCorrect = Math.round((correct / total) * 100);
-  const avgScore   = 83;
-  // Distinct stat: avg score breakdown
-  const topMistake = 'naturalness'; // would be computed from actual data
+  const practiced = sentences.filter(s => !s.correct && s._done).length;
+  const pctCorrect = total ? Math.round((correct / total) * 100) : 0;
+  const scored = sentences.map(s => s.pronScore).filter(v => Number.isFinite(v));
+  const avgScore = scored.length ? Math.round(scored.reduce((a,b)=>a+b,0) / scored.length) : null;
+  const tagCounts = sentences.reduce((acc, s) => {
+    if (!s.correct && s.tag) acc[s.tag] = (acc[s.tag] || 0) + 1;
+    return acc;
+  }, {});
+  const topMistake = Object.entries(tagCounts).sort((a,b) => b[1]-a[1])[0]?.[0] || '—';
 
   return (
     <div style={{ height:'100%', overflowY:'auto', background:C.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
@@ -2015,8 +2137,8 @@ const SummaryScreen = ({ sentences, onDone }) => {
         <div style={{ fontSize:40, fontFamily:"'Newsreader',serif", fontWeight:300, color:C.ink, lineHeight:1.2, marginBottom:6 }}>
           Session complete
         </div>
-        <div style={{ fontSize:13, color:C.ink3, fontFamily:"'DM Mono',monospace", marginBottom:36 }}>
-          Preply with Yuki · May 1, 2026
+        <div style={{ fontSize:13, color:C.ink3, fontFamily:"'DM Mono',monospace", marginBottom:36, wordBreak:'break-word' }}>
+          {sessionTitle || 'Audio session'}
         </div>
 
         {/* Stats grid */}
@@ -2029,10 +2151,10 @@ const SummaryScreen = ({ sentences, onDone }) => {
               sub:`${correct} of ${total} sentences needed no changes`,
             },
             {
-              value:avgScore,
-              label:'Avg pronunciation score',
+              value: avgScore != null ? avgScore : '—',
+              label: avgScore != null ? 'Avg pronunciation score' : 'No pronunciation scores yet',
               color:C.blue,
-              sub:'across all sentences you practiced',
+              sub: avgScore != null ? 'across sentences you practiced' : 'record a sentence to get a score',
             },
             {
               value:practiced,
@@ -2116,7 +2238,7 @@ const App = () => {
     ink:'#ede8df', ink2:'#a09080', ink3:'#5e5448',
     border:'rgba(255,230,180,0.07)', border2:'rgba(255,230,180,0.14)',
     blue:'#7da4f8', blueBg:'rgba(125,164,248,0.12)',
-    green:'#50c878', greenBg:'rgba(80,200,120,0.12)', greenLight:'rgba(80,200,120,0.2)',
+    green:'#50c878', greenBg:'rgba(80,200,120,0.12)', greenLight:'#7fd99a',
     amber:'#e0a840', amberBg:'rgba(224,168,64,0.12)',
     red:'#f07060', redBg:'rgba(240,112,96,0.12)',
   };
@@ -2125,7 +2247,7 @@ const App = () => {
     ink:'#1c1710', ink2:'#5a5040', ink3:'#9a8f7a',
     border:'rgba(80,60,20,0.09)', border2:'rgba(80,60,20,0.17)',
     blue:'#2c5cf5', blueBg:'rgba(44,92,245,0.08)',
-    green:'#2a7a42', greenBg:'rgba(42,122,66,0.09)', greenLight:'rgba(42,122,66,0.18)',
+    green:'#2a7a42', greenBg:'rgba(42,122,66,0.09)', greenLight:'#7fb88e',
     amber:'#b07020', amberBg:'rgba(176,112,32,0.09)',
     red:'#c23b22', redBg:'rgba(194,59,34,0.08)',
   };
@@ -2147,6 +2269,8 @@ const App = () => {
   const [cardIdx, setCardIdx]   = useState(0);
   const [direction, setDir]     = useState('up');
   const [activeStudyUploadId, setActiveStudyUploadId] = useState(null);
+  const [showCorrections, setShowCorrections] = useState(false);
+  const [hideCorrect, setHideCorrect] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -2184,18 +2308,48 @@ const App = () => {
     setCardIdx(idx);
     persistProgress({ currentIndex: idx });
   };
-  const markCurrentDone = () => {
-    const cur = sentences[cardIdx];
-    if (!cur || cur._done) return;
-    setSentences(prev => prev.map((s,i) => i === cardIdx ? { ...s, _done: true } : s));
-    if (cur.studyId) persistProgress({ sentenceUpdates: [{ id: cur.studyId, done: true }] });
+  const visibleIndices = hideCorrect
+    ? sentences.map((s, i) => (s.correct ? -1 : i)).filter(i => i >= 0)
+    : sentences.map((_, i) => i);
+  const visiblePos = visibleIndices.indexOf(cardIdx);
+  const findNextVisible = (from, step) => {
+    let i = from + step;
+    while (i >= 0 && i < sentences.length) {
+      if (!hideCorrect || !sentences[i].correct) return i;
+      i += step;
+    }
+    return -1;
   };
   const goNext = () => {
-    markCurrentDone();
-    if (cardIdx < sentences.length-1) goTo(cardIdx+1,'right'); else setScreen('summary');
+    const next = findNextVisible(cardIdx, 1);
+    if (next === -1) setScreen('summary'); else goTo(next, 'right');
   };
-  const goPrev = () => { if (cardIdx > 0) goTo(cardIdx-1,'left'); };
+  const goPrev = () => {
+    const prev = findNextVisible(cardIdx, -1);
+    if (prev !== -1) goTo(prev, 'left');
+  };
   const goJump = (idx) => goTo(idx, idx > cardIdx ? 'right' : 'left');
+  const handleAssessmentUpdate = (studyId, pronScore) => {
+    setSentences(prev => prev.map(s =>
+      s.studyId === studyId
+        ? { ...s, pronScore, _done: Number.isFinite(pronScore) && pronScore >= PASS_SCORE }
+        : s
+    ));
+  };
+  const handleRenameSession = async (newTitle) => {
+    if (!activeStudyUploadId) return;
+    const trimmed = String(newTitle || '').trim();
+    if (!trimmed) return;
+    try {
+      const data = await renameUploadRequest(activeStudyUploadId, trimmed);
+      const updated = data.upload;
+      setPending(updated.title || trimmed);
+      setSessions(prev => prev.map(s => s.id === activeStudyUploadId ? { ...s, title: updated.title || trimmed } : s));
+      setPendingUpload(prev => prev && prev.id === activeStudyUploadId ? { ...prev, title: updated.title || trimmed } : prev);
+    } catch (error) {
+      console.warn('rename failed', error);
+    }
+  };
 
   const mergeUpload = (upload) => {
     if (!upload) return;
@@ -2281,6 +2435,8 @@ const App = () => {
         setActiveStudyUploadId(session.id);
         setPending(data.upload?.title || session.title || 'Audio session');
         setPendingUpload(data.upload || session);
+        setShowCorrections(false);
+        setHideCorrect(false);
         setScreen('review');
       } catch (error) {
         setUploadError(error.message || 'Unable to open this study session.');
@@ -2357,14 +2513,45 @@ const App = () => {
   useEffect(() => {
     const h = e => {
       if (screen !== 'review') return;
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (e.key==='ArrowRight'||e.key==='ArrowDown') goNext();
       if (e.key==='ArrowLeft' ||e.key==='ArrowUp')   goPrev();
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [screen, cardIdx]);
+  }, [screen, cardIdx, hideCorrect, sentences]);
+
+  useEffect(() => {
+    if (screen !== 'review' || !hideCorrect) return;
+    const current = sentences[cardIdx];
+    if (current && current.correct) {
+      let next = -1;
+      for (let i = cardIdx + 1; i < sentences.length; i++) {
+        if (!sentences[i].correct) { next = i; break; }
+      }
+      if (next === -1) for (let i = cardIdx - 1; i >= 0; i--) {
+        if (!sentences[i].correct) { next = i; break; }
+      }
+      if (next !== -1) goTo(next, next > cardIdx ? 'right' : 'left');
+    }
+  }, [hideCorrect, screen]);
 
   const cur = sentences[cardIdx];
+  const hasAnyCorrect = sentences.some(s => s.correct);
+  const isLastVisible = (() => {
+    if (!cur) return false;
+    return findNextVisible(cardIdx, 1) === -1;
+  })();
+  const scoredList = sentences.map(s => s.pronScore).filter(v => Number.isFinite(v));
+  const liveAvgScore = scoredList.length ? scoredList.reduce((a,b)=>a+b,0) / scoredList.length : null;
+  const visibleSentences = hideCorrect ? sentences.filter(s => !s.correct) : sentences;
+  const visibleCurrent = hideCorrect ? Math.max(0, visibleSentences.findIndex(s => s.id === cur?.id)) : cardIdx;
+  const handleJumpVisible = (visIdx) => {
+    const target = visibleSentences[visIdx];
+    if (!target) return;
+    const realIdx = sentences.findIndex(s => s.id === target.id);
+    if (realIdx >= 0) goJump(realIdx);
+  };
 
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:C.bg, color:C.ink, transition:'background 0.3s, color 0.3s' }}>
@@ -2372,11 +2559,25 @@ const App = () => {
       {screen==='processing' && <ProcessingScreen title={pendingTitle} upload={pendingUpload} transcript={pendingTranscript} error={uploadError} onDone={handleDone} onBack={()=>setScreen('home')}/>}
       {screen==='speaker'    && <SpeakerSelectionScreen upload={pendingUpload} transcript={pendingTranscript} onSubmit={handleSpeakerSubmit} onBack={()=>setScreen('home')} busy={speakerBusy} error={uploadError}/>}
       {screen==='review'     && cur && (
-        cur.correct
-          ? <CorrectCard key={cur.id} sentence={cur} index={cardIdx} total={sentences.length} direction={direction} onNext={goNext} onPrev={goPrev} onJump={goJump} sentences={sentences}/>
-          : <FocusCard   key={cur.id} sentence={cur} index={cardIdx} total={sentences.length} direction={direction} onNext={goNext} onPrev={goPrev} onJump={goJump} sentences={sentences}/>
+        <div style={{ height:'100%', display:'flex', flexDirection:'column', background:C.bg, minHeight:0 }}>
+          <SessionHeader
+            title={pendingTitle}
+            avgScore={liveAvgScore}
+            hideCorrect={hideCorrect}
+            onToggleHideCorrect={() => setHideCorrect(v => !v)}
+            onBack={handleReviewExit}
+            onRename={handleRenameSession}
+            hasCorrect={hasAnyCorrect}
+          />
+          <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+            {cur.correct
+              ? <CorrectCard key={cur.id} sentence={cur} index={visibleCurrent} total={visibleSentences.length} direction={direction} onNext={goNext} onPrev={goPrev} onJump={handleJumpVisible} sentences={visibleSentences} isLastVisible={isLastVisible}/>
+              : <FocusCard   key={cur.id} sentence={cur} index={visibleCurrent} total={visibleSentences.length} direction={direction} onNext={goNext} onPrev={goPrev} onJump={handleJumpVisible} sentences={visibleSentences} isLastVisible={isLastVisible} showCorrections={showCorrections} onShowCorrections={() => setShowCorrections(true)} onAssessmentUpdate={handleAssessmentUpdate}/>
+            }
+          </div>
+        </div>
       )}
-      {screen==='summary' && <SummaryScreen sentences={sentences} onDone={handleReviewExit}/>}
+      {screen==='summary' && <SummaryScreen sentences={sentences} sessionTitle={pendingTitle} onDone={handleReviewExit}/>}
 
       {useTweaks && (
         <TweaksPanel>
