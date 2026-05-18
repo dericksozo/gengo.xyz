@@ -57,6 +57,11 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
 
     button { font-family: 'DM Sans', sans-serif; }
+
+    /* Use dvh so the app shell always fills the *visible* viewport on mobile.
+       100vh on iOS Safari includes the area behind the URL bar, clipping
+       bottom-pinned elements like BottomNav when the bar is visible. */
+    .app-shell { height: 100vh; height: 100dvh; }
   </style>
 </head>
 <body>
@@ -2559,7 +2564,7 @@ const App = () => {
   };
 
   return (
-    <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:C.bg, color:C.ink, transition:'background 0.3s, color 0.3s' }}>
+    <div className="app-shell" style={{ display:'flex', flexDirection:'column', background:C.bg, color:C.ink, transition:'background 0.3s, color 0.3s' }}>
       {screen==='home'       && <HomeScreen sessions={sessions} onUpload={handleUpload} onResume={handleResume} user={user} onSignIn={handleSignIn} onSignUp={handleSignUp} onSignOut={handleSignOut} uploadError={uploadError} uploadBusy={uploadBusy} sessionsLoading={sessionsLoading}/>}
       {screen==='processing' && <ProcessingScreen title={pendingTitle} upload={pendingUpload} transcript={pendingTranscript} error={uploadError} onDone={handleDone} onBack={()=>setScreen('home')}/>}
       {screen==='speaker'    && <SpeakerSelectionScreen upload={pendingUpload} transcript={pendingTranscript} onSubmit={handleSpeakerSubmit} onBack={()=>setScreen('home')} busy={speakerBusy} error={uploadError}/>}
