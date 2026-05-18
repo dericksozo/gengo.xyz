@@ -857,7 +857,7 @@ const CorrectCard = ({ sentence, index, total, direction, onNext, onPrev, onJump
   const animClass = direction==='right'?'enter-right':direction==='left'?'enter-left':'enter-up';
 
   return (
-    <div className={animClass} style={{ height:'100%', display:'flex', flexDirection:'column', background:C.bg }}>
+    <div className={animClass} style={{ flex:1, minHeight:0, height:'100%', display:'flex', flexDirection:'column', background:C.bg }}>
       <TopBar sentences={sentences} current={index} onJump={onJump}/>
 
       {/* Content — same padding as FocusCard for smooth transitions */}
@@ -1141,6 +1141,10 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
       setAssessError('This sentence cannot be assessed yet.');
       return;
     }
+    if (nativeAudioRef.current && playNative) {
+      try { nativeAudioRef.current.pause(); } catch {}
+      setPlayNative(false);
+    }
     setAssessError(null);
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
       setAssessError('Recording is not supported in this browser.');
@@ -1327,7 +1331,7 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
   })();
 
   return (
-    <div key={sentence.id} className={animClass} style={{ height:'100%', display:'flex', flexDirection:'column', background:C.bg, overflow:'hidden' }}>
+    <div key={sentence.id} className={animClass} style={{ flex:1, minHeight:0, height:'100%', display:'flex', flexDirection:'column', background:C.bg, overflow:'hidden' }}>
       <TopBar sentences={sentences} current={index} onJump={onJump}/>
 
       <div style={{ flex:1, overflowY:'auto', padding:'16px clamp(20px,6vw,100px) 28px', display:'flex', flexDirection:'column', gap:24 }}>
@@ -1344,6 +1348,12 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
             }}><ChkI sz={11} col={C.green}/> complete · {score}</span>
           )}
           {sentence.start && <span style={{ fontSize:12, color:C.ink3, fontFamily:"'DM Mono',monospace" }}>{sentence.start}</span>}
+        </div>
+
+        {/* Explanation — always visible so users understand the issue before revealing corrections */}
+        <div style={{ padding:'14px 18px', background:C.bg2, borderRadius:10, border:`1px solid ${C.border}` }}>
+          <div style={{ fontSize:13, fontFamily:"'Noto Serif JP',serif", color:C.ink2, lineHeight:1.9, marginBottom:8 }}>{sentence.expl_jp}</div>
+          <div style={{ fontSize:13, color:C.ink3, lineHeight:1.7, borderTop:`1px solid ${C.border}`, paddingTop:8 }}>{sentence.expl_en}</div>
         </div>
 
         {/* What you said */}
@@ -1599,12 +1609,6 @@ const FocusCard = ({ sentence, index, total, direction, onNext, onPrev, onJump, 
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Explanation */}
-            <div style={{ padding:'14px 18px', background:C.bg2, borderRadius:10, border:`1px solid ${C.border}` }}>
-              <div style={{ fontSize:13, fontFamily:"'Noto Serif JP',serif", color:C.ink2, lineHeight:1.9, marginBottom:8 }}>{sentence.expl_jp}</div>
-              <div style={{ fontSize:13, color:C.ink3, lineHeight:1.7, borderTop:`1px solid ${C.border}`, paddingTop:8 }}>{sentence.expl_en}</div>
             </div>
 
           </div>
@@ -2306,6 +2310,7 @@ const App = () => {
   const goTo   = (idx, dir) => {
     setDir(dir);
     setCardIdx(idx);
+    setShowCorrections(false);
     persistProgress({ currentIndex: idx });
   };
   const visibleIndices = hideCorrect
